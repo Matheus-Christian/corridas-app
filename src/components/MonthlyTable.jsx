@@ -1,5 +1,5 @@
 import React from 'react';
-import { CalendarRange, ExternalLink, ArrowRight } from 'lucide-react';
+import { CalendarRange, ExternalLink, ArrowRight, Copy, Check } from 'lucide-react';
 import { getDriverStatus, getPassengerRate } from '../utils/storage';
 
 export default function MonthlyTable({
@@ -7,7 +7,10 @@ export default function MonthlyTable({
   mondayDates,   // Array of monday ISO strings for the selected month
   passengers,    // Current passenger list
   onJumpToWeek,  // Callback to jump to a week: (mondayISO) => void
+  isPublicView = false,
+  pixKey = '',
 }) {
+  const [copiedPassengerId, setCopiedPassengerId] = React.useState(null);
 
   const getWeekRangeLabel = (mondayISO) => {
     const start = new Date(mondayISO + 'T00:00:00');
@@ -80,6 +83,13 @@ export default function MonthlyTable({
     });
   };
 
+  const handleCopyPix = (passengerId) => {
+    if (!pixKey) return;
+    navigator.clipboard.writeText(pixKey);
+    setCopiedPassengerId(passengerId);
+    setTimeout(() => setCopiedPassengerId(null), 2000);
+  };
+
   return (
     <div className="glass-panel rounded-3xl p-6 shadow-xl border border-white/10 w-full flex flex-col">
       
@@ -91,14 +101,17 @@ export default function MonthlyTable({
             Consolidado Mensal
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Resumo dos pagamentos acumulados semana a semana. Clique em uma coluna ou célula para editar a semana.
+            {isPublicView 
+              ? 'Resumo dos pagamentos acumulados semana a semana (modo leitura).'
+              : 'Resumo dos pagamentos acumulados semana a semana. Clique em uma coluna ou célula para editar a semana.'
+            }
           </p>
         </div>
       </div>
 
       {/* Main Table Wrapper (Horizontal scroll for mobile) */}
       <div className="overflow-x-auto -mx-6 px-6">
-        <table className="w-full border-collapse min-w-[700px]">
+        <table className="w-full border-collapse min-w-[800px]">
           <thead>
             <tr>
               <th className="text-left py-3.5 px-4 font-semibold text-slate-400 text-sm border-b border-white/5 w-44">
@@ -113,13 +126,15 @@ export default function MonthlyTable({
                 return (
                   <th 
                     key={mon} 
-                    onClick={() => onJumpToWeek(mon)}
-                    className="py-3 px-3 font-semibold text-center border-b border-white/5 hover:bg-white/5 hover:text-indigo-400 cursor-pointer transition-colors group w-32"
-                    title={`Editar Semana de ${label}`}
+                    onClick={() => !isPublicView && onJumpToWeek(mon)}
+                    className={`py-3 px-3 font-semibold text-center border-b border-white/5 transition-colors group w-32 ${
+                      isPublicView ? 'cursor-default' : 'hover:bg-white/5 hover:text-indigo-400 cursor-pointer'
+                    }`}
+                    title={isPublicView ? `Semana de ${label}` : `Editar Semana de ${label}`}
                   >
                     <div className="flex flex-col items-center gap-0.5">
                       <span className="text-[10px] text-slate-500 font-medium">Semana {idx + 1}</span>
-                      <span className="text-xs font-bold leading-tight group-hover:text-indigo-300">{label}</span>
+                      <span className={`text-xs font-bold leading-tight ${isPublicView ? '' : 'group-hover:text-indigo-300'}`}>{label}</span>
                       <span className={`text-[9px] font-semibold mt-1 px-1.5 py-0.5 rounded-full ${
                         hasData ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-800 text-slate-500'
                       }`}>
@@ -133,13 +148,18 @@ export default function MonthlyTable({
               <th className="text-right py-3.5 px-4 font-semibold text-slate-200 text-sm border-b border-white/5 w-32">
                 Total do Mês
               </th>
+
+              {/* PIX Column Header */}
+              <th className="text-center py-3.5 px-4 font-semibold text-slate-400 text-sm border-b border-white/5 w-24">
+                PIX
+              </th>
             </tr>
           </thead>
           
           <tbody className="divide-y divide-white/5">
             {passengers.length === 0 ? (
               <tr>
-                <td colSpan={mondayDates.length + 2} className="py-8 text-center text-slate-400 text-sm">
+                <td colSpan={mondayDates.length + 3} className="py-8 text-center text-slate-400 text-sm">
                   Nenhum passageiro cadastrado no momento.
                 </td>
               </tr>
@@ -171,23 +191,27 @@ export default function MonthlyTable({
                       
                       let cellClass = '';
                       if (!hasData) {
-                        cellClass = 'text-slate-600 hover:text-indigo-400';
+                        cellClass = isPublicView ? 'text-slate-600' : 'text-slate-600 hover:text-indigo-400';
                       } else if (weekVal > 0) {
-                        cellClass = 'bg-emerald-500/5 text-emerald-400 font-bold hover:bg-emerald-500/10 hover:text-emerald-300';
+                        cellClass = isPublicView 
+                          ? 'bg-emerald-500/5 text-emerald-400 font-bold'
+                          : 'bg-emerald-500/5 text-emerald-400 font-bold hover:bg-emerald-500/10 hover:text-emerald-300';
                       } else {
-                        cellClass = 'text-slate-500 hover:text-indigo-400';
+                        cellClass = isPublicView ? 'text-slate-500' : 'text-slate-500 hover:text-indigo-400';
                       }
 
                       return (
                         <td 
                           key={mon} 
-                          onClick={() => onJumpToWeek(mon)}
-                          className={`py-3 px-2 text-center border-b border-white/5 cursor-pointer transition duration-150 ${cellClass}`}
-                          title="Clique para ir para esta semana"
+                          onClick={() => !isPublicView && onJumpToWeek(mon)}
+                          className={`py-3 px-2 text-center border-b border-white/5 transition duration-150 ${
+                            isPublicView ? 'cursor-default' : 'cursor-pointer'
+                          } ${cellClass}`}
+                          title={isPublicView ? undefined : "Clique para ir para esta semana"}
                         >
                           <div className="flex items-center justify-center gap-1">
                             <span>{weekVal > 0 ? formatCurrency(weekVal) : '-'}</span>
-                            <ExternalLink className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            {!isPublicView && <ExternalLink className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />}
                           </div>
                         </td>
                       );
@@ -196,6 +220,35 @@ export default function MonthlyTable({
                     {/* Passenger Month Total */}
                     <td className="py-4 px-4 text-right font-bold text-emerald-400 text-sm border-b border-white/5">
                       {formatCurrency(monthTotal)}
+                    </td>
+
+                    {/* PIX Cell */}
+                    <td className="py-4 px-4 text-center border-b border-white/5">
+                      {pixKey ? (
+                        <button
+                          onClick={() => handleCopyPix(passenger.id)}
+                          className={`inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer select-none ${
+                            copiedPassengerId === passenger.id
+                              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 shadow-sm'
+                              : 'bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-600 shadow-sm'
+                          }`}
+                          title="Copiar Chave PIX do Motorista"
+                        >
+                          {copiedPassengerId === passenger.id ? (
+                            <>
+                              <Check className="w-3.5 h-3.5" />
+                              <span className="text-[10px]">Copiado!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3.5 h-3.5" />
+                              <span className="text-[10px]">PIX</span>
+                            </>
+                          )}
+                        </button>
+                      ) : (
+                        <span className="text-xs text-slate-500 font-medium">-</span>
+                      )}
                     </td>
                   </tr>
                 );
@@ -214,8 +267,10 @@ export default function MonthlyTable({
                   return (
                     <td 
                       key={mon} 
-                      onClick={() => onJumpToWeek(mon)}
-                      className="py-4 px-2 text-center text-slate-200 border-b border-white/5 hover:text-indigo-400 hover:bg-white/5 cursor-pointer transition-colors"
+                      onClick={() => !isPublicView && onJumpToWeek(mon)}
+                      className={`py-4 px-2 text-center text-slate-200 border-b border-white/5 transition-colors ${
+                        isPublicView ? 'cursor-default' : 'hover:text-indigo-400 hover:bg-white/5 cursor-pointer'
+                      }`}
                     >
                       {weekGrand > 0 ? formatCurrency(weekGrand) : '-'}
                     </td>
@@ -225,6 +280,8 @@ export default function MonthlyTable({
                 <td className="py-4 px-4 text-right text-emerald-300 border-b border-white/5">
                   {formatCurrency(getMonthGrandTotal())}
                 </td>
+
+                <td className="py-4 px-4 border-b border-white/5" />
               </tr>
             )}
           </tbody>
@@ -232,12 +289,14 @@ export default function MonthlyTable({
       </div>
 
       {/* Mobile Swipe Hint */}
-      <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-xs text-slate-500">
-        <span className="flex items-center gap-1 text-[11px]">
-          <ArrowRight className="w-3.5 h-3.5 text-indigo-400" />
-          Atalho: Clique em qualquer valor ou data para abrir e editar os detalhes daquela semana.
-        </span>
-      </div>
+      {!isPublicView && (
+        <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-xs text-slate-500">
+          <span className="flex items-center gap-1 text-[11px]">
+            <ArrowRight className="w-3.5 h-3.5 text-indigo-400" />
+            Atalho: Clique em qualquer valor ou data para abrir e editar os detalhes daquela semana.
+          </span>
+        </div>
+      )}
 
     </div>
   );

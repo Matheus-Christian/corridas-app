@@ -1,5 +1,5 @@
 import React from 'react';
-import { ToggleLeft, ToggleRight, Ban, User, CalendarDays, Coins, UserPlus, Trash2 } from 'lucide-react';
+import { ToggleLeft, ToggleRight, Ban, User, CalendarDays, Coins, UserPlus, Trash2, Copy, Check } from 'lucide-react';
 import { getDriverStatus, getPassengerRate } from '../utils/storage';
 
 const WEEK_DAYS = [
@@ -25,8 +25,11 @@ export default function RidesTable({
   carEfficiency = 12,
   onOpenSelectPassengersModal,
   onRemovePassenger,
+  isPublicView = false,
+  pixKey = '',
 }) {
   const [swipedPassengerId, setSwipedPassengerId] = React.useState(null);
+  const [copiedPassengerId, setCopiedPassengerId] = React.useState(null);
 
   React.useEffect(() => {
     if (!swipedPassengerId) return;
@@ -44,6 +47,7 @@ export default function RidesTable({
       document.removeEventListener('click', handleOutsideClick);
     };
   }, [swipedPassengerId]);
+
   const start = new Date(startDate + 'T00:00:00');
 
   const getDayDate = (dayIndex) => {
@@ -102,6 +106,13 @@ export default function RidesTable({
     });
   };
 
+  const handleCopyPix = (passengerId) => {
+    if (!pixKey) return;
+    navigator.clipboard.writeText(pixKey);
+    setCopiedPassengerId(passengerId);
+    setTimeout(() => setCopiedPassengerId(null), 2000);
+  };
+
   return (
     <div className="glass-panel rounded-3xl p-6 shadow-xl border border-white/10 w-full flex flex-col">
       
@@ -113,31 +124,38 @@ export default function RidesTable({
             Matriz de Caronas
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Clique nas células para alternar presença (🟢) e folga (🔵). Clique no valor verde para digitar uma tarifa customizada.
+            {isPublicView 
+              ? 'Tabela de presenças da semana (modo leitura).'
+              : 'Clique nas células para alternar presença (🟢) e folga (🔵). Clique no valor verde para digitar uma tarifa customizada.'
+            }
           </p>
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 justify-end">
           {/* Add passenger to week button */}
-          <button
-            onClick={onOpenSelectPassengersModal}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/10 hover:shadow-indigo-600/25 transition duration-200 cursor-pointer"
-            title="Selecionar os passageiros que participam desta semana"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>Selecionar Passageiros</span>
-          </button>
+          {!isPublicView && (
+            <button
+              onClick={onOpenSelectPassengersModal}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/10 hover:shadow-indigo-600/25 transition duration-200 cursor-pointer"
+              title="Selecionar os passageiros que participam desta semana"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Selecionar Passageiros</span>
+            </button>
+          )}
 
           {/* Mobile Swipe Hint */}
-          <div className="text-xs text-slate-400 flex items-center gap-1 sm:hidden bg-slate-900/60 px-3 py-2 rounded-xl border border-white/5">
-            <span>↔️ Deslize</span>
-          </div>
+          {!isPublicView && (
+            <div className="text-xs text-slate-400 flex items-center gap-1 sm:hidden bg-slate-900/60 px-3 py-2 rounded-xl border border-white/5">
+              <span>↔️ Deslize</span>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Main Table Wrapper (Horizontal scroll for mobile) */}
       <div className="overflow-x-auto -mx-6 px-6">
-        <table className="w-full border-collapse min-w-[750px]">
+        <table className="w-full border-collapse min-w-[800px]">
           <thead>
             <tr>
               {/* Passenger Column Header */}
@@ -154,20 +172,17 @@ export default function RidesTable({
                 let btnClass = 'bg-slate-800 text-slate-400 hover:bg-slate-700';
                 let dotClass = 'bg-slate-500';
                 let statusLabel = 'Neutro M';
-                let btnTitle = 'Motorista Neutro (Clique para mudar)';
 
                 if (dStatus === 'active') {
                   headerClass = 'bg-emerald-500/[0.02] text-emerald-400 border-emerald-500/5';
                   btnClass = 'bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 border border-emerald-500/20';
                   dotClass = 'bg-emerald-400 glow-green';
                   statusLabel = 'Ativo M';
-                  btnTitle = 'Motorista Ativo (Clique para mudar)';
                 } else if (dStatus === 'off') {
                   headerClass = 'bg-red-500/[0.03] text-red-400 border-red-500/10';
                   btnClass = 'bg-red-500/10 text-red-300 hover:bg-red-500/20 border border-red-500/20';
                   dotClass = 'bg-red-400';
                   statusLabel = 'Folga M';
-                  btnTitle = 'Motorista de Folga (Clique para mudar)';
                 }
 
                 return (
@@ -180,14 +195,24 @@ export default function RidesTable({
                       <span className="text-sm font-bold">{dateStr}</span>
                       
                       {/* Driver status cycle button */}
-                      <button
-                        onClick={() => onToggleDriverStatus(idx)}
-                        className={`mt-1.5 px-2 py-1 rounded-lg text-[10px] font-semibold flex items-center justify-center gap-1.5 transition ${btnClass}`}
-                        title={btnTitle}
-                      >
-                        <span className={`w-1.5 h-1.5 rounded-full ${dotClass}`} />
-                        <span>{statusLabel}</span>
-                      </button>
+                      {isPublicView ? (
+                        <div
+                          className={`mt-1.5 px-2 py-1 rounded-lg text-[10px] font-semibold flex items-center justify-center gap-1.5 opacity-85 select-none ${btnClass}`}
+                          title={`Motorista: ${statusLabel}`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${dotClass}`} />
+                          <span>{statusLabel}</span>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => onToggleDriverStatus(idx)}
+                          className={`mt-1.5 px-2 py-1 rounded-lg text-[10px] font-semibold flex items-center justify-center gap-1.5 transition ${btnClass}`}
+                          title={`Motorista ${statusLabel} (Clique para mudar)`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${dotClass}`} />
+                          <span>{statusLabel}</span>
+                        </button>
+                      )}
                     </div>
                   </th>
                 );
@@ -197,28 +222,35 @@ export default function RidesTable({
               <th className="text-right py-3.5 px-4 font-semibold text-slate-400 text-sm border-b border-white/5 w-28">
                 Total Acumulado
               </th>
+
+              {/* PIX Column Header */}
+              <th className="text-center py-3.5 px-4 font-semibold text-slate-400 text-sm border-b border-white/5 w-24">
+                PIX
+              </th>
             </tr>
           </thead>
           
           <tbody className="divide-y divide-white/5">
             {passengers.length === 0 ? (
               <tr>
-                <td colSpan={9} className="py-12 text-center">
+                <td colSpan={10} className="py-12 text-center">
                   <div className="flex flex-col items-center justify-center gap-3 py-4 max-w-sm mx-auto">
                     <div className="p-4 bg-indigo-500/10 text-indigo-400 rounded-3xl border border-indigo-500/25 shadow-lg shadow-indigo-500/5">
                       <UserPlus className="w-8 h-8" />
                     </div>
                     <div className="text-slate-200 text-base font-bold mt-1">Matriz de Caronas Vazia</div>
                     <p className="text-xs text-slate-400 leading-relaxed">
-                      Esta semana não tem passageiros ativos. Clique no botão abaixo para selecionar quais passageiros participarão das caronas.
+                      Esta semana não tem passageiros ativos.
                     </p>
-                    <button
-                      onClick={onOpenSelectPassengersModal}
-                      className="mt-2 flex items-center gap-2 py-2.5 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-lg shadow-indigo-600/20 transition cursor-pointer"
-                    >
-                      <UserPlus className="w-4 h-4" />
-                      Selecionar Passageiros
-                    </button>
+                    {!isPublicView && (
+                      <button
+                        onClick={onOpenSelectPassengersModal}
+                        className="mt-2 flex items-center gap-2 py-2.5 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-lg shadow-indigo-600/20 transition cursor-pointer"
+                      >
+                        <UserPlus className="w-4 h-4" />
+                        Selecionar Passageiros
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -236,33 +268,38 @@ export default function RidesTable({
                     <td className="py-4 px-4 border-b border-white/5">
                       <div className="flex items-center overflow-hidden w-full">
                         {/* Excluir/Delete Button Container */}
-                        <div
-                          className={`transition-all duration-300 ease-out flex items-center justify-center ${
-                            swipedPassengerId === passenger.id ? 'w-10 opacity-100 mr-2.5' : 'w-0 opacity-0'
-                          }`}
-                        >
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onRemovePassenger(passenger.id);
-                            }}
-                            className="p-2 bg-red-600 hover:bg-red-500 text-white rounded-xl shadow-md transition duration-150 active:scale-95 flex items-center justify-center cursor-pointer"
-                            title="Remover passageiro desta semana"
+                        {!isPublicView && (
+                          <div
+                            className={`transition-all duration-300 ease-out flex items-center justify-center ${
+                              swipedPassengerId === passenger.id ? 'w-10 opacity-100 mr-2.5' : 'w-0 opacity-0'
+                            }`}
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onRemovePassenger(passenger.id);
+                              }}
+                              className="p-2 bg-red-600 hover:bg-red-500 text-white rounded-xl shadow-md transition duration-150 active:scale-95 flex items-center justify-center cursor-pointer"
+                              title="Remover passageiro desta semana"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
 
-                        {/* Passenger Details (Click to toggle swiped state) */}
+                        {/* Passenger Details */}
                         <div
                           onClick={(e) => {
+                            if (isPublicView) return;
                             e.stopPropagation();
                             setSwipedPassengerId(prev => prev === passenger.id ? null : passenger.id);
                           }}
-                          className="flex items-center gap-2 cursor-pointer select-none transition-transform duration-300"
+                          className={`flex items-center gap-2 select-none transition-transform duration-300 ${
+                            isPublicView ? 'cursor-default' : 'cursor-pointer'
+                          }`}
                         >
                           <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs transition duration-200 ${
-                            swipedPassengerId === passenger.id 
+                            !isPublicView && swipedPassengerId === passenger.id 
                               ? 'bg-red-500/10 text-red-500' 
                               : 'bg-indigo-500/10 text-indigo-400'
                           }`}>
@@ -270,7 +307,7 @@ export default function RidesTable({
                           </div>
                           <div>
                             <div className={`text-sm font-semibold leading-tight transition duration-200 ${
-                              swipedPassengerId === passenger.id ? 'text-red-400' : 'text-slate-200'
+                              !isPublicView && swipedPassengerId === passenger.id ? 'text-red-400' : 'text-slate-200'
                             }`}>
                               {passenger.name}
                             </div>
@@ -319,8 +356,10 @@ export default function RidesTable({
                             </div>
                           ) : (
                             <div
-                              onClick={() => onToggleCell(passenger.id, dayIdx)}
-                              className={`w-full min-h-[46px] rounded-xl text-xs font-semibold py-2 px-0.5 select-none flex flex-col items-center justify-center gap-0.5 status-transition cursor-pointer ${cellClass}`}
+                              onClick={() => !isPublicView && onToggleCell(passenger.id, dayIdx)}
+                              className={`w-full min-h-[46px] rounded-xl text-xs font-semibold py-2 px-0.5 select-none flex flex-col items-center justify-center gap-0.5 status-transition ${
+                                isPublicView ? 'cursor-default' : 'cursor-pointer'
+                              } ${cellClass}`}
                             >
                               {/* Color Dot indicator */}
                               <span className={`w-2 h-2 rounded-full ${
@@ -333,21 +372,27 @@ export default function RidesTable({
                               
                               {/* Value rendering */}
                               {cellObj.status === 'present' ? (
-                                <div 
-                                  className="flex items-center justify-center gap-0.5"
-                                  onClick={(e) => e.stopPropagation()} // Stop clicking inside input from toggling presence
-                                >
-                                  <span className="text-[10px] text-emerald-500/70 font-normal animate-pulse-light">R$</span>
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    value={cellObj.value === 0 ? '' : cellObj.value}
-                                    onChange={(e) => onCellValChange(passenger.id, dayIdx, e.target.value)}
-                                    className="cell-rate-input w-12 bg-transparent text-center font-bold text-xs text-emerald-400 focus:outline-none focus:bg-emerald-500/10 rounded px-0.5 border-b border-dashed border-emerald-500/20 focus:border-emerald-400/50"
-                                    title="Editar valor pago"
-                                  />
-                                </div>
+                                isPublicView ? (
+                                  <span className="font-bold text-emerald-400 text-[11px]">
+                                    R$ {cellObj.value.toFixed(2).replace('.', ',')}
+                                  </span>
+                                ) : (
+                                  <div 
+                                    className="flex items-center justify-center gap-0.5"
+                                    onClick={(e) => e.stopPropagation()} // Stop clicking inside input from toggling presence
+                                  >
+                                    <span className="text-[10px] text-emerald-500/70 font-normal animate-pulse-light">R$</span>
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      value={cellObj.value === 0 ? '' : cellObj.value}
+                                      onChange={(e) => onCellValChange(passenger.id, dayIdx, e.target.value)}
+                                      className="cell-rate-input w-12 bg-transparent text-center font-bold text-xs text-emerald-400 focus:outline-none focus:bg-emerald-500/10 rounded px-0.5 border-b border-dashed border-emerald-500/20 focus:border-emerald-400/50"
+                                      title="Editar valor pago"
+                                    />
+                                  </div>
+                                )
                               ) : cellObj.status === 'off' ? (
                                 <span className="font-semibold text-blue-400/80">Folga P</span>
                               ) : (
@@ -368,6 +413,35 @@ export default function RidesTable({
                         </span>
                       </div>
                     </td>
+
+                    {/* PIX Cell */}
+                    <td className="py-4 px-4 text-center border-b border-white/5">
+                      {pixKey ? (
+                        <button
+                          onClick={() => handleCopyPix(passenger.id)}
+                          className={`inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer select-none ${
+                            copiedPassengerId === passenger.id
+                              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 shadow-sm'
+                              : 'bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-600 shadow-sm'
+                          }`}
+                          title="Copiar Chave PIX do Motorista"
+                        >
+                          {copiedPassengerId === passenger.id ? (
+                            <>
+                              <Check className="w-3.5 h-3.5" />
+                              <span className="text-[10px]">Copiado!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3.5 h-3.5" />
+                              <span className="text-[10px]">PIX</span>
+                            </>
+                          )}
+                        </button>
+                      ) : (
+                        <span className="text-xs text-slate-500 font-medium">-</span>
+                      )}
+                    </td>
                   </tr>
                 );
               })
@@ -386,7 +460,7 @@ export default function RidesTable({
           </div>
           <div className="flex items-center gap-2 text-xs text-slate-400">
             <span className="w-3.5 h-3.5 rounded-full bg-emerald-500 inline-block glow-green" />
-            <span>🟢 Ativo M / Presença P (Gera Custos / Tarifa Editável)</span>
+            <span>🟢 Ativo M / Presença P (Gera Custos / Tarifa {isPublicView ? 'Fixada' : 'Editável'})</span>
           </div>
           <div className="flex items-center gap-2 text-xs text-slate-400">
             <span className="w-3.5 h-3.5 rounded-full bg-blue-500 inline-block" />

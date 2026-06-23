@@ -57,6 +57,7 @@ export const getInitialData = () => {
     driverStatus: initialDriverStatus,
     driverOffDays: initialDriverOff,
     cellStates: initialCells,
+    pixKey: '',
   };
 };
 

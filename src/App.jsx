@@ -9,11 +9,45 @@ import MonthlySelector from './components/MonthlySelector';
 import MonthlyTable from './components/MonthlyTable';
 import RefuelingsView from './components/RefuelingsView';
 import PassengerRoutesTable from './components/PassengerRoutesTable';
-import { CarFront, Cloud, CloudOff, CalendarDays, CalendarRange, Fuel, Sun, Moon } from 'lucide-react';
+import LoginView from './components/LoginView';
+import { CarFront, Cloud, CloudOff, CalendarDays, CalendarRange, Fuel, Sun, Moon, LogOut } from 'lucide-react';
 import { db } from './firebase';
 import { doc, onSnapshot, setDoc, getDocs, collection, query, orderBy, limit, getDoc } from 'firebase/firestore';
 
 export default function App() {
+  const isPublicView = typeof window !== 'undefined' && (
+    window.location.pathname.startsWith('/passageiros') ||
+    window.location.hash.startsWith('#/passageiros') ||
+    window.location.hash === '#passageiros' ||
+    new URLSearchParams(window.location.search).get('public') === 'true'
+  );
+
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(() => {
+    try {
+      return localStorage.getItem('caronas_admin_logged_in') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleLoginSuccess = () => {
+    setIsAdminLoggedIn(true);
+    try {
+      localStorage.setItem('caronas_admin_logged_in', 'true');
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleLogout = () => {
+    setIsAdminLoggedIn(false);
+    try {
+      localStorage.removeItem('caronas_admin_logged_in');
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const [theme, setTheme] = useState(() => {
     try {
       return localStorage.getItem('caronas_theme') || 'dark';
@@ -39,6 +73,10 @@ export default function App() {
       root.classList.remove('light');
     }
   }, [theme]);
+
+  if (!isPublicView && !isAdminLoggedIn) {
+    return <LoginView onLoginSuccess={handleLoginSuccess} />;
+  }
 
   // Load week state with June 2026 limit check
   const [state, setState] = useState(() => {
@@ -200,6 +238,7 @@ export default function App() {
       a.carEfficiency === b.carEfficiency &&
       a.dailyBasicValue === b.dailyBasicValue &&
       a.dailyConsumption === b.dailyConsumption &&
+      a.pixKey === b.pixKey &&
       JSON.stringify(a.driverOffDays) === JSON.stringify(b.driverOffDays) &&
       JSON.stringify(a.driverStatus) === JSON.stringify(b.driverStatus) &&
       JSON.stringify(a.passengers) === JSON.stringify(b.passengers) &&
@@ -298,6 +337,7 @@ export default function App() {
           let dailyBasicToUse = state.dailyBasicValue;
           let dailyConsumptionToUse = state.dailyConsumption;
           let carEfficiencyToUse = state.carEfficiency || 12;
+          let pixKeyToUse = state.pixKey || '';
 
           if (!querySnap.empty) {
             const latestDoc = querySnap.docs[0].data();
@@ -305,6 +345,7 @@ export default function App() {
             dailyBasicToUse = latestDoc.dailyBasicValue ?? state.dailyBasicValue;
             dailyConsumptionToUse = latestDoc.dailyConsumption ?? state.dailyConsumption;
             carEfficiencyToUse = latestDoc.carEfficiency ?? (state.carEfficiency || 12);
+            pixKeyToUse = latestDoc.pixKey ?? (state.pixKey || '');
           }
 
           const initialCells = {};
@@ -326,6 +367,7 @@ export default function App() {
             driverOffDays: initialDriverOff,
             passengers: [],
             cellStates: initialCells,
+            pixKey: pixKeyToUse,
           };
 
           skipSyncStatusChangeRef.current = true;
@@ -378,6 +420,67 @@ export default function App() {
   useEffect(() => {
     saveData(state);
   }, [state]);
+
+  // 4. Autosave weekly state to Firestore with debounce
+  useEffect(() => {
+    if (isPublicView) return;
+    if (syncStatus === 'local-only' || syncStatus === 'loading') return;
+    if (syncStatus !== 'offline') return;
+
+    const timer = setTimeout(async () => {
+      setSyncStatus('syncing');
+      try {
+        if (db) {
+          const docRef = doc(db, 'weeks', state.startDate);
+          await setDoc(docRef, {
+            startDate: state.startDate,
+            gasPrice: state.gasPrice,
+            carEfficiency: state.carEfficiency || 12,
+            dailyBasicValue: state.dailyBasicValue,
+            dailyConsumption: state.dailyConsumption,
+            driverOffDays: state.driverOffDays,
+            driverStatus: state.driverStatus || {},
+            passengers: state.passengers,
+            cellStates: state.cellStates,
+            pixKey: state.pixKey || '',
+            updatedAt: new Date().toISOString()
+          });
+        }
+        setSyncStatus('synced');
+      } catch (err) {
+        console.error("Erro no salvamento automático:", err);
+        setSyncStatus('error');
+      }
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [state, db, isPublicView, syncStatus]);
+
+  // 5. Autosave refuelings to Firestore with debounce
+  useEffect(() => {
+    if (isPublicView) return;
+    if (syncStatus === 'local-only' || syncStatus === 'loading') return;
+    if (syncStatus !== 'offline') return;
+
+    const timer = setTimeout(async () => {
+      setSyncStatus('syncing');
+      try {
+        if (db) {
+          const docRef = doc(db, 'refuelings', 'all');
+          await setDoc(docRef, {
+            list: refuelingsList,
+            updatedAt: new Date().toISOString()
+          });
+        }
+        setSyncStatus('synced');
+      } catch (err) {
+        console.error("Erro no salvamento automático de abastecimentos:", err);
+        setSyncStatus('error');
+      }
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [refuelingsList, db, isPublicView, syncStatus]);
 
   // 4. Batch load all weeks for the selected month (triggers when viewMode changes or selectedMonth shifts)
   useEffect(() => {
@@ -449,6 +552,7 @@ export default function App() {
           driverStatus: state.driverStatus || {},
           passengers: state.passengers,
           cellStates: state.cellStates,
+          pixKey: state.pixKey || '',
           updatedAt: new Date().toISOString()
         });
         setSyncStatus('synced');
@@ -653,6 +757,10 @@ export default function App() {
     setState(prev => ({ ...prev, carEfficiency: eff }));
   };
 
+  const handlePixKeyChange = (key) => {
+    setState(prev => ({ ...prev, pixKey: key }));
+  };
+
   const handleUpdatePassengerRoute = (passengerId, routeType, field, value) => {
     setState(prev => {
       const nextPassengers = prev.passengers.map(p => {
@@ -688,9 +796,29 @@ export default function App() {
     setState(prev => ({ ...prev, dailyConsumption: val }));
   };
 
-  const handleStartDateChange = (newDate) => {
+  const handleStartDateChange = async (newDate) => {
     if (new Date(newDate + 'T00:00:00') < new Date('2026-06-01T00:00:00')) {
       newDate = '2026-06-01';
+    }
+    if (syncStatus === 'offline' && db) {
+      try {
+        const docRef = doc(db, 'weeks', state.startDate);
+        await setDoc(docRef, {
+          startDate: state.startDate,
+          gasPrice: state.gasPrice,
+          carEfficiency: state.carEfficiency || 12,
+          dailyBasicValue: state.dailyBasicValue,
+          dailyConsumption: state.dailyConsumption,
+          driverOffDays: state.driverOffDays,
+          driverStatus: state.driverStatus || {},
+          passengers: state.passengers,
+          cellStates: state.cellStates,
+          pixKey: state.pixKey || '',
+          updatedAt: new Date().toISOString()
+        });
+      } catch (err) {
+        console.error("Erro ao salvar antes de mudar de semana:", err);
+      }
     }
     setState(prev => ({ ...prev, startDate: newDate }));
   };
@@ -703,7 +831,27 @@ export default function App() {
   };
 
   // Shortcut: click monthly cell/header to navigate to weekly editor
-  const handleJumpToWeek = (mondayISO) => {
+  const handleJumpToWeek = async (mondayISO) => {
+    if (syncStatus === 'offline' && db) {
+      try {
+        const docRef = doc(db, 'weeks', state.startDate);
+        await setDoc(docRef, {
+          startDate: state.startDate,
+          gasPrice: state.gasPrice,
+          carEfficiency: state.carEfficiency || 12,
+          dailyBasicValue: state.dailyBasicValue,
+          dailyConsumption: state.dailyConsumption,
+          driverOffDays: state.driverOffDays,
+          driverStatus: state.driverStatus || {},
+          passengers: state.passengers,
+          cellStates: state.cellStates,
+          pixKey: state.pixKey || '',
+          updatedAt: new Date().toISOString()
+        });
+      } catch (err) {
+        console.error("Erro ao salvar antes de saltar para semana:", err);
+      }
+    }
     const weekData = monthlyWeeksData[mondayISO] || loadData(mondayISO);
     setState(prev => ({
       ...prev,
@@ -836,7 +984,7 @@ export default function App() {
   const isMonthly = viewMode === 'monthly';
   const { totalGross, totalNet, activeDaysCount } = calculateWeeklyTotals();
   const { monthlyGross, monthlyNet, monthlyActiveDays } = calculateMonthlyTotals();
-  const { avgGas, avgDaily, avgConsumption, avgEfficiency } = getMonthlyAverages();
+  const { avgGas, avgDaily, avgConsumption, avgEfficiency } = getMonthlyAverages();  const activeViewMode = (isPublicView && viewMode === 'refuelings') ? 'weekly' : viewMode;
 
   return (
     <div className="relative min-h-screen w-full px-4 py-8 md:px-8 overflow-hidden">
@@ -870,7 +1018,7 @@ export default function App() {
               <button
                 onClick={() => setViewMode('weekly')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wider transition duration-200 flex items-center gap-1 ${
-                  viewMode === 'weekly'
+                  activeViewMode === 'weekly'
                     ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/10'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
@@ -881,7 +1029,7 @@ export default function App() {
               <button
                 onClick={() => setViewMode('monthly')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wider transition duration-200 flex items-center gap-1 ${
-                  viewMode === 'monthly'
+                  activeViewMode === 'monthly'
                     ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/10'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
@@ -889,17 +1037,19 @@ export default function App() {
                 <CalendarRange className="w-3.5 h-3.5" />
                 Mensal
               </button>
-              <button
-                onClick={() => setViewMode('refuelings')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wider transition duration-200 flex items-center gap-1 ${
-                  viewMode === 'refuelings'
-                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/10'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <Fuel className="w-3.5 h-3.5" />
-                Abastecimentos
-              </button>
+              {!isPublicView && (
+                <button
+                  onClick={() => setViewMode('refuelings')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wider transition duration-200 flex items-center gap-1 ${
+                    activeViewMode === 'refuelings'
+                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/10'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Fuel className="w-3.5 h-3.5" />
+                  Abastecimentos
+                </button>
+              )}
             </div>
 
             {/* Cloud status badge */}
@@ -950,16 +1100,35 @@ export default function App() {
             >
               {theme === 'dark' ? <Sun className="w-5.5 h-5.5" /> : <Moon className="w-5.5 h-5.5" />}
             </button>
+
+            {/* Logout Button */}
+            {!isPublicView && isAdminLoggedIn && (
+              <button
+                onClick={handleLogout}
+                className="p-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-xl text-red-400 hover:text-red-300 transition cursor-pointer flex items-center justify-center"
+                title="Sair da Área Administrativa"
+              >
+                <LogOut className="w-5.5 h-5.5" />
+              </button>
+            )}
           </div>
         </header>
 
+        {/* Public Warning Banner */}
+        {isPublicView && (
+          <div className="w-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 px-4 py-3 rounded-2xl flex items-center gap-2 text-xs md:text-sm font-semibold shadow-lg shadow-indigo-950/20">
+            <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
+            <span>Visualização Pública — Modo de Leitura</span>
+          </div>
+        )}
+
         {/* Date Selector depending on View Mode */}
-        {viewMode === 'monthly' ? (
+        {activeViewMode === 'monthly' ? (
           <MonthlySelector 
             selectedMonth={selectedMonth}
             onChangeMonth={handleMonthChange}
           />
-        ) : viewMode === 'weekly' ? (
+        ) : activeViewMode === 'weekly' ? (
           <DateSelector 
             startDate={state.startDate}
             onChangeStartDate={handleStartDateChange}
@@ -967,8 +1136,8 @@ export default function App() {
         ) : null}
 
         {/* Core Layout Grid */}
-        <main className="flex flex-col lg:flex-row gap-6 items-start">
-          {viewMode === 'refuelings' ? (
+        <main className="flex flex-col lg:flex-row gap-6 items-start w-full">
+          {activeViewMode === 'refuelings' ? (
             <RefuelingsView
               refuelings={refuelingsList}
               startDate={state.startDate}
@@ -982,7 +1151,7 @@ export default function App() {
           ) : (
             <>
               {/* Main Grid / Table depending on View Mode */}
-              {viewMode === 'monthly' ? (
+              {activeViewMode === 'monthly' ? (
                 isMonthlyLoading ? (
                   <div className="glass-panel rounded-3xl p-12 shadow-xl border border-white/10 flex-1 flex flex-col items-center justify-center gap-3">
                     <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
@@ -994,10 +1163,12 @@ export default function App() {
                     mondayDates={getMondaysInMonth(selectedMonth)}
                     passengers={state.passengers}
                     onJumpToWeek={handleJumpToWeek}
+                    isPublicView={isPublicView}
+                    pixKey={state.pixKey || ''}
                   />
                 )
               ) : (
-                <div className="flex-1 flex flex-col gap-6">
+                <div className="flex-1 flex flex-col gap-6 w-full">
                   <RidesTable
                     startDate={state.startDate}
                     passengers={state.passengers}
@@ -1011,35 +1182,42 @@ export default function App() {
                     carEfficiency={state.carEfficiency || 12}
                     onOpenSelectPassengersModal={() => setIsSelectWeekModalOpen(true)}
                     onRemovePassenger={handleRemovePassengerFromWeek}
+                    isPublicView={isPublicView}
+                    pixKey={state.pixKey || ''}
                   />
-                  <PassengerRoutesTable
-                    passengers={state.passengers}
-                    gasPrice={state.gasPrice}
-                    carEfficiency={state.carEfficiency || 12}
-                    onUpdatePassengerRoute={handleUpdatePassengerRoute}
-                  />
+                  {!isPublicView && (
+                    <PassengerRoutesTable
+                      passengers={state.passengers}
+                      gasPrice={state.gasPrice}
+                      carEfficiency={state.carEfficiency || 12}
+                      onUpdatePassengerRoute={handleUpdatePassengerRoute}
+                    />
+                  )}
                 </div>
               )}
 
               {/* Sidebar calculations & operations */}
               <SummarySidebar
-                gasPrice={viewMode === 'monthly' ? avgGas : state.gasPrice}
+                gasPrice={activeViewMode === 'monthly' ? avgGas : state.gasPrice}
                 onGasPriceChange={handleGasPriceChange}
-                dailyBasicValue={viewMode === 'monthly' ? avgDaily : state.dailyBasicValue}
+                dailyBasicValue={activeViewMode === 'monthly' ? avgDaily : state.dailyBasicValue}
                 onDailyBasicValueChange={handleDailyBasicValueChange}
-                dailyConsumption={viewMode === 'monthly' ? avgConsumption : state.dailyConsumption}
+                dailyConsumption={activeViewMode === 'monthly' ? avgConsumption : state.dailyConsumption}
                 onDailyConsumptionChange={handleDailyConsumptionChange}
-                carEfficiency={viewMode === 'monthly' ? avgEfficiency : state.carEfficiency || 12}
+                carEfficiency={activeViewMode === 'monthly' ? avgEfficiency : state.carEfficiency || 12}
                 onCarEfficiencyChange={handleCarEfficiencyChange}
-                activeDaysCount={viewMode === 'monthly' ? monthlyActiveDays : activeDaysCount}
-                totalGross={viewMode === 'monthly' ? monthlyGross : totalGross}
-                totalNet={viewMode === 'monthly' ? monthlyNet : totalNet}
+                activeDaysCount={activeViewMode === 'monthly' ? monthlyActiveDays : activeDaysCount}
+                totalGross={activeViewMode === 'monthly' ? monthlyGross : totalGross}
+                totalNet={activeViewMode === 'monthly' ? monthlyNet : totalNet}
                 onSave={handleSave}
                 onReset={handleReset}
                 onOpenPassengersModal={() => setIsModalOpen(true)}
                 saveSuccess={saveSuccess}
-                disabled={viewMode === 'monthly'}
+                disabled={activeViewMode === 'monthly'}
                 syncStatus={syncStatus}
+                isPublicView={isPublicView}
+                pixKey={state.pixKey || ''}
+                onPixKeyChange={handlePixKeyChange}
               />
             </>
           )}

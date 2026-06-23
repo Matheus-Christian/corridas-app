@@ -440,7 +440,7 @@ export default function RefuelingsView({
         <div className="relative overflow-hidden rounded-3xl glass-panel p-6 shadow-xl border border-indigo-500/20 bg-gradient-to-br from-slate-900/60 to-indigo-950/20">
           <div className="absolute -top-12 -right-12 w-32 h-32 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
           <span className="text-xs font-semibold uppercase tracking-wider text-indigo-400">Total Gasto em Combustível</span>
-          <h3 className="text-3xl font-extrabold text-white tracking-tight mt-1">
+          <h3 className="text-3xl font-extrabold text-slate-100 tracking-tight mt-1">
             {formatCurrency(totalSpent)}
           </h3>
           <p className="text-xs text-slate-400 mt-2 flex items-center gap-1">
@@ -453,7 +453,7 @@ export default function RefuelingsView({
         <div className="relative overflow-hidden rounded-3xl glass-panel p-6 shadow-xl border border-blue-500/20 bg-gradient-to-br from-slate-900/60 to-blue-950/20">
           <div className="absolute -top-12 -right-12 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
           <span className="text-xs font-semibold uppercase tracking-wider text-blue-400">Volume Total Adquirido</span>
-          <h3 className="text-3xl font-extrabold text-white tracking-tight mt-1">
+          <h3 className="text-3xl font-extrabold text-slate-100 tracking-tight mt-1">
             {totalLiters.toFixed(2)} <span className="text-sm font-medium text-slate-400">L</span>
           </h3>
           <p className="text-xs text-slate-400 mt-2 flex items-center gap-1">
