@@ -213,7 +213,7 @@ export default function RidesTable({
                       let cellClass = '';
                       
                       if (isDriverOff) {
-                        cellClass = 'bg-slate-900/60 border border-dashed border-red-500/10 text-slate-500 hover:cursor-not-allowed';
+                        cellClass = 'cell-blocked bg-slate-900/60 border border-dashed border-red-500/10 text-slate-500 hover:cursor-not-allowed';
                       } else if (cellObj.status === 'present') {
                         cellClass = 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/15 glow-green';
                       } else if (cellObj.status === 'off') {
@@ -232,7 +232,7 @@ export default function RidesTable({
                             <div 
                               className={`w-full min-h-[46px] rounded-xl text-[10px] font-semibold py-2 px-1 select-none flex flex-col items-center justify-center gap-0.5 text-center leading-tight ${cellClass}`}
                             >
-                              <span className="w-1.5 h-1.5 rounded-full bg-red-500/30" />
+                              <span className="cell-blocked-dot w-1.5 h-1.5 rounded-full bg-red-500/30" />
                               <span className="font-semibold text-slate-600">
                                 Sem <br /> Corrida
                               </span>
@@ -257,14 +257,14 @@ export default function RidesTable({
                                   className="flex items-center justify-center gap-0.5"
                                   onClick={(e) => e.stopPropagation()} // Stop clicking inside input from toggling presence
                                 >
-                                  <span className="text-[10px] text-emerald-500/70 font-normal">R$</span>
+                                  <span className="text-[10px] text-emerald-500/70 font-normal animate-pulse-light">R$</span>
                                   <input
                                     type="number"
                                     step="0.01"
                                     min="0"
                                     value={cellObj.value === 0 ? '' : cellObj.value}
                                     onChange={(e) => onCellValChange(passenger.id, dayIdx, e.target.value)}
-                                    className="w-12 bg-transparent text-center font-bold text-xs text-emerald-400 focus:outline-none focus:bg-emerald-500/10 rounded px-0.5 border-b border-dashed border-emerald-500/20 focus:border-emerald-400/50"
+                                    className="cell-rate-input w-12 bg-transparent text-center font-bold text-xs text-emerald-400 focus:outline-none focus:bg-emerald-500/10 rounded px-0.5 border-b border-dashed border-emerald-500/20 focus:border-emerald-400/50"
                                     title="Editar valor pago"
                                   />
                                 </div>

@@ -1,10 +1,10 @@
 // Helper to handle local storage load and save operations
 
 export const DEFAULT_PASSENGERS = [
-  { id: '1', name: 'Fernando', defaultRate: 8.00 },
-  { id: '2', name: 'Gustavo', defaultRate: 8.00 },
-  { id: '3', name: 'Leo Finger', defaultRate: 8.00 },
-  { id: '4', name: 'Matheus', defaultRate: 8.00 },
+  { id: '1', name: 'Fernando', defaultRate: 8.00, defaultIdaKm: 0, defaultVoltaKm: 0 },
+  { id: '2', name: 'Gustavo', defaultRate: 8.00, defaultIdaKm: 0, defaultVoltaKm: 0 },
+  { id: '3', name: 'Leo Finger', defaultRate: 8.00, defaultIdaKm: 0, defaultVoltaKm: 0 },
+  { id: '4', name: 'Matheus', defaultRate: 8.00, defaultIdaKm: 0, defaultVoltaKm: 0 },
 ];
 
 export const STORAGE_KEY = 'caronas_semanais_data';

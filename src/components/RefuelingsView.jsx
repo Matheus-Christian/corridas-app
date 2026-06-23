@@ -463,7 +463,7 @@ export default function RefuelingsView({
         </div>
 
         {/* Average Price */}
-        <div className="relative overflow-hidden rounded-3xl glass-panel p-6 shadow-xl border border-emerald-500/20 bg-gradient-to-br from-slate-900/60 to-emerald-950/20 glow-green">
+        <div className="relative overflow-hidden rounded-3xl glass-panel p-6 shadow-xl border border-emerald-500/20 bg-gradient-to-br from-slate-900/60 to-emerald-950/20 sidebar-net-card glow-green">
           <div className="absolute -top-12 -right-12 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
           <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400">Preço Médio Ponderado</span>
           <h3 className="text-3xl font-extrabold text-white tracking-tight mt-1">

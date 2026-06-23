@@ -20,10 +20,23 @@ export default function PassengerModal({ isOpen, onClose, passengers, onSave }) 
   };
 
   const handleRateChange = (id, defaultRate) => {
-    // Parse as float, or keep as string/zero while typing
     const val = parseFloat(defaultRate);
     setLocalPassengers(prev =>
       prev.map(p => (p.id === id ? { ...p, defaultRate: isNaN(val) ? 0 : val } : p))
+    );
+  };
+
+  const handleIdaKmChange = (id, defaultIdaKm) => {
+    const val = parseFloat(defaultIdaKm);
+    setLocalPassengers(prev =>
+      prev.map(p => (p.id === id ? { ...p, defaultIdaKm: isNaN(val) ? 0 : val } : p))
+    );
+  };
+
+  const handleVoltaKmChange = (id, defaultVoltaKm) => {
+    const val = parseFloat(defaultVoltaKm);
+    setLocalPassengers(prev =>
+      prev.map(p => (p.id === id ? { ...p, defaultVoltaKm: isNaN(val) ? 0 : val } : p))
     );
   };
 
@@ -31,7 +44,7 @@ export default function PassengerModal({ isOpen, onClose, passengers, onSave }) 
     const newId = Date.now().toString();
     setLocalPassengers(prev => [
       ...prev,
-      { id: newId, name: 'Novo Passageiro', defaultRate: 8.00 }
+      { id: newId, name: 'Novo Passageiro', defaultRate: 8.00, defaultIdaKm: 0, defaultVoltaKm: 0 }
     ]);
   };
 
@@ -40,7 +53,6 @@ export default function PassengerModal({ isOpen, onClose, passengers, onSave }) 
   };
 
   const handleSave = () => {
-    // Filter out passengers with empty names
     const filtered = localPassengers.filter(p => p.name.trim() !== '');
     onSave(filtered);
     onClose();
@@ -81,48 +93,85 @@ export default function PassengerModal({ isOpen, onClose, passengers, onSave }) 
             localPassengers.map((passenger, index) => (
               <div 
                 key={passenger.id} 
-                className="flex items-center gap-3 bg-white/5 p-3 rounded-2xl border border-white/5 hover:border-white/10 transition"
+                className="flex flex-col gap-3 bg-white/5 p-4 rounded-2xl border border-white/5 hover:border-white/10 transition"
               >
-                {/* Index badge */}
-                <span className="w-6 h-6 flex items-center justify-center rounded-full bg-indigo-500/10 text-indigo-300 text-xs font-semibold">
-                  {index + 1}
-                </span>
-
-                {/* Name Input */}
-                <div className="flex-1">
-                  <input
-                    type="text"
-                    value={passenger.name}
-                    onChange={(e) => handleNameChange(passenger.id, e.target.value)}
-                    placeholder="Nome do passageiro"
-                    className="w-full bg-slate-900 border border-slate-700/50 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 transition"
-                  />
-                </div>
-
-                {/* Default Rate Input */}
-                <div className="w-28 relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <span className="text-slate-400 text-xs">R$</span>
+                {/* Row 1: Name and Delete button */}
+                <div className="flex items-center gap-3">
+                  <span className="w-6 h-6 flex items-center justify-center rounded-full bg-indigo-500/10 text-indigo-300 text-xs font-semibold shrink-0">
+                    {index + 1}
+                  </span>
+                  
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      value={passenger.name}
+                      onChange={(e) => handleNameChange(passenger.id, e.target.value)}
+                      placeholder="Nome do passageiro"
+                      className="w-full bg-slate-900 border border-slate-700/50 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 transition"
+                    />
                   </div>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={passenger.defaultRate}
-                    onChange={(e) => handleRateChange(passenger.id, e.target.value)}
-                    placeholder="Valor"
-                    className="w-full bg-slate-900 border border-slate-700/50 rounded-xl pl-8 pr-2 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 transition"
-                  />
+
+                  <button
+                    onClick={() => handleRemovePassenger(passenger.id)}
+                    className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-xl transition duration-150 shrink-0"
+                    title="Excluir Passageiro"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
 
-                {/* Remove button */}
-                <button
-                  onClick={() => handleRemovePassenger(passenger.id)}
-                  className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-xl transition duration-150"
-                  title="Excluir Passageiro"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                {/* Row 2: Default Rate, Default Ida Km, Default Volta Km */}
+                <div className="grid grid-cols-3 gap-3 ml-9">
+                  {/* Default Rate */}
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                      <span className="text-slate-500 text-[10px] font-bold">R$</span>
+                    </div>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={passenger.defaultRate}
+                      onChange={(e) => handleRateChange(passenger.id, e.target.value)}
+                      placeholder="Tarifa Padrão"
+                      className="w-full bg-slate-900 border border-slate-700/50 rounded-xl pl-7 pr-1.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 transition"
+                      title="Tarifa Base Padrão"
+                    />
+                    <span className="text-[9px] text-slate-500 mt-1 block">Tarifa Base</span>
+                  </div>
+
+                  {/* Default Ida Km */}
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.1;any"
+                      min="0"
+                      value={passenger.defaultIdaKm === 0 ? '' : passenger.defaultIdaKm ?? ''}
+                      onChange={(e) => handleIdaKmChange(passenger.id, e.target.value)}
+                      placeholder="Km Ida"
+                      className="w-full bg-slate-900 border border-slate-700/50 rounded-xl px-2 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 transition"
+                      title="Quilômetros Ida Padrão"
+                    />
+                    <span className="absolute right-2 top-2.5 text-[9px] text-slate-500 font-bold">km</span>
+                    <span className="text-[9px] text-slate-500 mt-1 block">Ida Padrão</span>
+                  </div>
+
+                  {/* Default Volta Km */}
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.1;any"
+                      min="0"
+                      value={passenger.defaultVoltaKm === 0 ? '' : passenger.defaultVoltaKm ?? ''}
+                      onChange={(e) => handleVoltaKmChange(passenger.id, e.target.value)}
+                      placeholder="Km Volta"
+                      className="w-full bg-slate-900 border border-slate-700/50 rounded-xl px-2 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 transition"
+                      title="Quilômetros Volta Padrão"
+                    />
+                    <span className="absolute right-2 top-2.5 text-[9px] text-slate-500 font-bold">km</span>
+                    <span className="text-[9px] text-slate-500 mt-1 block">Volta Padrão</span>
+                  </div>
+                </div>
               </div>
             ))
           )}

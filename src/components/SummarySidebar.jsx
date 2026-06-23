@@ -59,7 +59,7 @@ export default function SummarySidebar({
     <div className="flex flex-col gap-6 w-full lg:w-80 shrink-0">
       
       {/* 1. MAIN NET EARNINGS CARD */}
-      <div className="relative overflow-hidden rounded-3xl glass-panel p-6 shadow-xl border border-emerald-500/20 bg-gradient-to-br from-slate-900/60 to-emerald-950/20 glow-green">
+      <div className="relative overflow-hidden rounded-3xl glass-panel p-6 shadow-xl border border-emerald-500/20 bg-gradient-to-br from-slate-900/60 to-emerald-950/20 sidebar-net-card glow-green">
         {/* Glow orb */}
         <div className="absolute -top-12 -right-12 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
         

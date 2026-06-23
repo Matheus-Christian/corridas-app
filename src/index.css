@@ -227,7 +227,7 @@ html.light {
     background-color: #f1f5f9 !important;
   }
 
-  /* Color adjustments for readability */
+  /* Color adjustments for high readability and contrast */
   .text-indigo-400 {
     color: #4f46e5 !important;
   }
@@ -236,11 +236,105 @@ html.light {
     color: #3730a3 !important;
   }
 
-  .text-emerald-400 {
-    color: #059669 !important;
+  /* Emerald (Green Highlights) */
+  .text-emerald-400,
+  .text-emerald-300 {
+    color: #047857 !important; /* emerald-700 - very clear dark green */
   }
 
   .bg-emerald-500\/10 {
-    background-color: rgba(16, 185, 129, 0.08) !important;
+    background-color: rgba(16, 185, 129, 0.12) !important; /* slightly higher opacity */
+    border-color: rgba(16, 185, 129, 0.25) !important;
   }
+
+  .bg-emerald-500\/20 {
+    background-color: rgba(16, 185, 129, 0.18) !important;
+  }
+
+  /* Red (Folgas / Costs Highlights) */
+  .text-red-400,
+  .text-red-300 {
+    color: #c21a1a !important; /* red-700 - dark red for high readability */
+  }
+
+  .bg-red-500\/10 {
+    background-color: rgba(239, 68, 68, 0.12) !important; /* slightly higher opacity */
+    border-color: rgba(239, 68, 68, 0.25) !important;
+  }
+
+  .bg-red-500\/20 {
+    background-color: rgba(239, 68, 68, 0.18) !important;
+  }
+
+  /* Blue (Folga Passageiro Highlights) */
+  .text-blue-400,
+  .text-blue-400\/80 {
+    color: #1d4ed8 !important; /* blue-700 - dark blue */
+  }
+
+  .bg-blue-500\/5 {
+    background-color: rgba(59, 130, 246, 0.08) !important;
+    border-color: rgba(59, 130, 246, 0.2) !important;
+  }
+
+  /* Solid Emerald Gradient for Main Net Earnings Card to avoid white-on-white text */
+  .sidebar-net-card {
+    background: linear-gradient(135deg, #10b981, #047857) !important;
+    border-color: rgba(16, 185, 129, 0.25) !important;
+  }
+
+  .sidebar-net-card h3,
+  .sidebar-net-card span,
+  .sidebar-net-card p,
+  .sidebar-net-card strong {
+    color: #ffffff !important;
+  }
+
+  .sidebar-net-card .text-slate-400,
+  .sidebar-net-card .text-emerald-400 {
+    color: #d1fae5 !important; /* light emerald-100 */
+  }
+
+  .sidebar-net-card .bg-emerald-500\/15 {
+    background-color: rgba(255, 255, 255, 0.15) !important;
+  }
+
+  .sidebar-net-card svg {
+    color: #ffffff !important;
+  }
+
+  /* Blocked passenger cells (when driver has folga) */
+  .cell-blocked {
+    background-color: #f1f5f9 !important;
+    border-color: #cbd5e1 !important;
+    color: #94a3b8 !important;
+  }
+
+  .cell-blocked-dot {
+    background-color: #94a3b8 !important;
+  }
+
+  /* Inline rate inputs styling */
+  .cell-rate-input {
+    color: #047857 !important; /* emerald-700 */
+    border-bottom: 1px dashed rgba(16, 185, 129, 0.4) !important;
+  }
+
+  .cell-rate-input:focus {
+    background-color: rgba(16, 185, 129, 0.15) !important;
+    border-bottom: 1px dashed #047857 !important;
+  }
+
+  .text-emerald-500\/70 {
+    color: rgba(4, 120, 87, 0.7) !important;
+  }
+}
+
+/* Rate input default behavior (Dark Mode) */
+.cell-rate-input {
+  background-color: transparent !important;
+  border-top: none !important;
+  border-left: none !important;
+  border-right: none !important;
+  box-shadow: none !important;
 }

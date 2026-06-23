@@ -200,6 +200,37 @@ export default function App() {
   useEffect(() => {
     if (!db) {
       setSyncStatus('local-only');
+      const loaded = loadData(state.startDate);
+      const key = `caronas_semanais_data_${state.startDate}`;
+      const exists = localStorage.getItem(key) !== null;
+      
+      let passengersToUse = loaded.passengers;
+      if (!exists) {
+        passengersToUse = loaded.passengers.map(p => {
+          const route = p.route || { ida: { from: '', to: '', km: 0 }, volta: { from: '', to: '', km: 0 } };
+          return {
+            ...p,
+            route: {
+              ...route,
+              ida: { ...route.ida, km: p.defaultIdaKm ?? 0 },
+              volta: { ...route.volta, km: p.defaultVoltaKm ?? 0 }
+            }
+          };
+        });
+      }
+      
+      const nextData = {
+        ...loaded,
+        passengers: passengersToUse
+      };
+      
+      setState(currentLocal => {
+        if (currentLocal.startDate === nextData.startDate && isDataEqual(currentLocal, nextData)) {
+          return currentLocal;
+        }
+        skipSyncStatusChangeRef.current = true;
+        return nextData;
+      });
       return;
     }
 
@@ -259,6 +290,24 @@ export default function App() {
             0: false, 1: false, 2: false, 3: false, 4: false, 5: false, 6: false
           };
 
+          const initializedPassengers = passengersToUse.map(p => {
+            const route = p.route || { ida: { from: '', to: '', km: 0 }, volta: { from: '', to: '', km: 0 } };
+            return {
+              ...p,
+              route: {
+                ...route,
+                ida: {
+                  ...route.ida,
+                  km: p.defaultIdaKm !== undefined ? p.defaultIdaKm : 0
+                },
+                volta: {
+                  ...route.volta,
+                  km: p.defaultVoltaKm !== undefined ? p.defaultVoltaKm : 0
+                }
+              }
+            };
+          });
+
           const newWeekData = {
             startDate: state.startDate,
             gasPrice: gasPriceToUse,
@@ -267,7 +316,7 @@ export default function App() {
             dailyConsumption: dailyConsumptionToUse,
             driverStatus: initialDriverStatus,
             driverOffDays: initialDriverOff,
-            passengers: passengersToUse,
+            passengers: initializedPassengers,
             cellStates: initialCells,
           };
 
@@ -410,11 +459,38 @@ export default function App() {
     setState(prev => {
       const nextCells = { ...prev.cellStates };
       
-      newPassengers.forEach(np => {
+      const updatedPassengers = newPassengers.map(np => {
         const oldP = prev.passengers.find(p => p.id === np.id);
         const oldRate = oldP ? oldP.defaultRate : np.defaultRate;
         const newRate = np.defaultRate;
         
+        let route = np.route || (oldP && oldP.route) || { ida: { from: '', to: '', km: 0 }, volta: { from: '', to: '', km: 0 } };
+        
+        if (!oldP) {
+          // New passenger
+          route = {
+            ...route,
+            ida: { ...route.ida, km: np.defaultIdaKm ?? 0 },
+            volta: { ...route.volta, km: np.defaultVoltaKm ?? 0 }
+          };
+        } else {
+          // Existing passenger - update route km if default km changed in the modal
+          const defaultIdaChanged = oldP.defaultIdaKm !== np.defaultIdaKm;
+          const defaultVoltaChanged = oldP.defaultVoltaKm !== np.defaultVoltaKm;
+          
+          route = {
+            ...route,
+            ida: {
+              ...route.ida,
+              km: defaultIdaChanged ? (np.defaultIdaKm ?? 0) : (route.ida?.km ?? 0)
+            },
+            volta: {
+              ...route.volta,
+              km: defaultVoltaChanged ? (np.defaultVoltaKm ?? 0) : (route.volta?.km ?? 0)
+            }
+          };
+        }
+
         if (!nextCells[np.id]) {
           nextCells[np.id] = {};
           for (let day = 0; day < 7; day++) {
@@ -430,6 +506,11 @@ export default function App() {
             }
           }
         }
+        
+        return {
+          ...np,
+          route
+        };
       });
       
       const activeIds = newPassengers.map(p => p.id);
@@ -441,7 +522,7 @@ export default function App() {
       
       return {
         ...prev,
-        passengers: newPassengers,
+        passengers: updatedPassengers,
         cellStates: nextCells
       };
     });
