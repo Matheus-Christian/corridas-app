@@ -95,3 +95,152 @@
 .animate-float-delayed {
   animation: float-delayed 18s ease-in-out infinite;
 }
+
+/* ==========================================
+   LIGHT MODE STYLE OVERRIDES
+   ========================================== */
+html.light, html.light body {
+  background-color: #f8fafc !important; /* slate-50 */
+  color: #0f172a !important; /* slate-900 */
+}
+
+html.light {
+  /* Header Title Gradient */
+  h1 {
+    background-image: linear-gradient(to right, #312e81, #1e1b4b) !important;
+    color: transparent !important;
+  }
+
+  /* Glass Panels */
+  .glass-panel {
+    background: rgba(255, 255, 255, 0.75) !important;
+    border: 1px solid rgba(15, 23, 42, 0.08) !important;
+    box-shadow: 0 10px 15px -3px rgba(15, 23, 42, 0.04), 0 4px 6px -4px rgba(15, 23, 42, 0.04) !important;
+  }
+
+  /* Overrides for background utility classes */
+  .bg-slate-950,
+  .bg-slate-900\/60,
+  .bg-slate-950\/60,
+  .bg-slate-950\/40,
+  .bg-slate-950\/80,
+  .bg-slate-900\/40 {
+    background-color: #ffffff !important;
+  }
+
+  .bg-slate-800 {
+    background-color: #f1f5f9 !important; /* slate-100 */
+    color: #334155 !important;
+  }
+
+  .bg-slate-900 {
+    background-color: #e2e8f0 !important; /* slate-200 */
+  }
+
+  /* Overrides for text utility classes */
+  .text-slate-50,
+  .text-slate-100,
+  .text-slate-200 {
+    color: #0f172a !important;
+  }
+
+  .text-slate-300,
+  .text-slate-400 {
+    color: #475569 !important;
+  }
+
+  .text-slate-500 {
+    color: #64748b !important;
+  }
+
+  /* Overrides for border utility classes */
+  .border-white\/5,
+  .border-white\/10,
+  .border-slate-800,
+  .border-slate-800\/80,
+  .border-slate-850,
+  .divide-white\/5 {
+    border-color: #e2e8f0 !important;
+  }
+
+  .divide-white\/5 > :not([hidden]) ~ :not([hidden]) {
+    border-color: #e2e8f0 !important;
+  }
+
+  /* Form controls (inputs, dates, numbers) */
+  input[type="text"],
+  input[type="number"],
+  input[type="date"],
+  select {
+    background-color: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+    color: #0f172a !important;
+  }
+
+  input[type="text"]:focus,
+  input[type="number"]:focus,
+  input[type="date"]:focus,
+  select:focus {
+    border-color: #6366f1 !important;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15) !important;
+  }
+
+  input::placeholder {
+    color: #94a3b8 !important;
+  }
+
+  /* Scrollbars */
+  ::-webkit-scrollbar-track {
+    background: rgba(241, 245, 249, 0.6) !important;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.3) !important;
+    border-color: rgba(241, 245, 249, 0.6) !important;
+  }
+
+  /* Hover overrides */
+  .hover\:bg-white\/\[0\.01\]:hover {
+    background-color: rgba(15, 23, 42, 0.015) !important;
+  }
+
+  .hover\:bg-white\/5:hover {
+    background-color: rgba(15, 23, 42, 0.04) !important;
+  }
+
+  .hover\:bg-slate-700:hover {
+    background-color: #cbd5e1 !important;
+  }
+
+  /* Table cells and grids */
+  .bg-slate-900\/10 {
+    background-color: #f1f5f9 !important;
+    border-color: #cbd5e1 !important;
+  }
+
+  .bg-indigo-500\/10 {
+    background-color: rgba(99, 102, 241, 0.08) !important;
+  }
+
+  .bg-slate-900\/60 p-1 {
+    background-color: #f1f5f9 !important;
+  }
+
+  /* Color adjustments for readability */
+  .text-indigo-400 {
+    color: #4f46e5 !important;
+  }
+
+  .text-indigo-300 {
+    color: #3730a3 !important;
+  }
+
+  .text-emerald-400 {
+    color: #059669 !important;
+  }
+
+  .bg-emerald-500\/10 {
+    background-color: rgba(16, 185, 129, 0.08) !important;
+  }
+}

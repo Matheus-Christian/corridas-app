@@ -8,11 +8,37 @@ import MonthlySelector from './components/MonthlySelector';
 import MonthlyTable from './components/MonthlyTable';
 import RefuelingsView from './components/RefuelingsView';
 import PassengerRoutesTable from './components/PassengerRoutesTable';
-import { CarFront, Cloud, CloudOff, CalendarDays, CalendarRange, Fuel } from 'lucide-react';
+import { CarFront, Cloud, CloudOff, CalendarDays, CalendarRange, Fuel, Sun, Moon } from 'lucide-react';
 import { db } from './firebase';
 import { doc, onSnapshot, setDoc, getDocs, collection, query, orderBy, limit, getDoc } from 'firebase/firestore';
 
 export default function App() {
+  const [theme, setTheme] = useState(() => {
+    try {
+      return localStorage.getItem('caronas_theme') || 'dark';
+    } catch {
+      return 'dark';
+    }
+  });
+
+  const toggleTheme = () => {
+    setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
+  };
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('caronas_theme', theme);
+    } catch (e) {
+      console.error(e);
+    }
+    const root = window.document.documentElement;
+    if (theme === 'light') {
+      root.classList.add('light');
+    } else {
+      root.classList.remove('light');
+    }
+  }, [theme]);
+
   // Load week state with June 2026 limit check
   const [state, setState] = useState(() => {
     const loaded = loadData();
@@ -805,6 +831,15 @@ export default function App() {
                 </>
               )}
             </div>
+
+            {/* Theme Toggle Button */}
+            <button
+              onClick={toggleTheme}
+              className="p-2 bg-slate-900/60 hover:bg-slate-800/80 border border-white/5 rounded-xl text-slate-300 hover:text-slate-100 transition cursor-pointer flex items-center justify-center"
+              title={theme === 'dark' ? 'Ativar Modo Claro' : 'Ativar Modo Escuro'}
+            >
+              {theme === 'dark' ? <Sun className="w-5.5 h-5.5" /> : <Moon className="w-5.5 h-5.5" />}
+            </button>
           </div>
         </header>
 
