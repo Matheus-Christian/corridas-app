@@ -1,21 +1,28 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 
+const sanitizeEnv = (val) => {
+  if (typeof val !== 'string') return val;
+  return val.replace(/^["']|["']$/g, '').trim();
+};
+
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  apiKey: sanitizeEnv(import.meta.env.VITE_FIREBASE_API_KEY),
+  authDomain: sanitizeEnv(import.meta.env.VITE_FIREBASE_AUTH_DOMAIN),
+  projectId: sanitizeEnv(import.meta.env.VITE_FIREBASE_PROJECT_ID),
+  storageBucket: sanitizeEnv(import.meta.env.VITE_FIREBASE_STORAGE_BUCKET),
+  messagingSenderId: sanitizeEnv(import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID),
+  appId: sanitizeEnv(import.meta.env.VITE_FIREBASE_APP_ID),
 };
 
 // Check if credentials are set and are not placeholders
 const isConfigValid = 
   firebaseConfig.apiKey && 
-  firebaseConfig.apiKey !== 'sua_api_key_aqui' &&
+  firebaseConfig.apiKey.toLowerCase() !== 'sua_api_key_aqui' &&
+  firebaseConfig.apiKey !== '' &&
   firebaseConfig.projectId &&
-  firebaseConfig.projectId !== 'seu_project_id_aqui';
+  firebaseConfig.projectId.toLowerCase() !== 'seu_project_id_aqui' &&
+  firebaseConfig.projectId !== '';
 
 let db = null;
 let app = null;

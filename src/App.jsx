@@ -48,11 +48,13 @@ export default function App() {
         if (docSnap.exists()) {
           const data = docSnap.data();
           if (data.list) {
+            skipRefuelingsSyncStatusChangeRef.current = true;
             setRefuelingsList(data.list);
           }
         }
       } catch (err) {
         console.error("Erro ao buscar abastecimentos do Firestore:", err);
+        setSyncStatus('error');
       }
     };
 
@@ -90,8 +92,8 @@ export default function App() {
       setTimeout(() => setSaveSuccess(false), 2000);
     } catch (err) {
       console.error("Erro ao salvar abastecimentos no Firestore:", err);
-      setSyncStatus('offline');
-      alert("Erro ao salvar dados na nuvem.");
+      setSyncStatus('error');
+      alert("Erro ao salvar dados na nuvem. Verifique suas regras do Firestore.");
     }
   };
   const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -106,7 +108,10 @@ export default function App() {
   const [isMonthlyLoading, setIsMonthlyLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [syncStatus, setSyncStatus] = useState(() => (db ? 'loading' : 'offline'));
+  const [syncStatus, setSyncStatus] = useState(() => (db ? 'loading' : 'local-only'));
+
+  const skipSyncStatusChangeRef = React.useRef(false);
+  const skipRefuelingsSyncStatusChangeRef = React.useRef(false);
 
   // Helper to ensure cell states are objects with status and value fields (defensive parsing)
   const getCellObject = (cell, defaultRate) => {
@@ -168,7 +173,7 @@ export default function App() {
   // 1. One-time Firestore read on week change (no real-time listener)
   useEffect(() => {
     if (!db) {
-      setSyncStatus('offline');
+      setSyncStatus('local-only');
       return;
     }
 
@@ -185,6 +190,7 @@ export default function App() {
               setSyncStatus('synced');
               return currentLocal;
             }
+            skipSyncStatusChangeRef.current = true;
             setSyncStatus('synced');
             return {
               ...currentLocal,
@@ -239,12 +245,13 @@ export default function App() {
             cellStates: initialCells,
           };
 
+          skipSyncStatusChangeRef.current = true;
           setState(newWeekData);
           setSyncStatus('offline'); // Unsaved local state initially
         }
       } catch (error) {
         console.error("Erro ao carregar dados do Firestore:", error);
-        setSyncStatus('offline');
+        setSyncStatus('error');
       }
     };
 
@@ -253,10 +260,25 @@ export default function App() {
 
   // Mark status as offline (unsaved changes) when local state is updated
   useEffect(() => {
+    if (skipSyncStatusChangeRef.current) {
+      skipSyncStatusChangeRef.current = false;
+      return;
+    }
     if (syncStatus === 'synced') {
       setSyncStatus('offline');
     }
   }, [state]);
+
+  // Mark status as offline (unsaved changes) when refuelings are updated
+  useEffect(() => {
+    if (skipRefuelingsSyncStatusChangeRef.current) {
+      skipRefuelingsSyncStatusChangeRef.current = false;
+      return;
+    }
+    if (syncStatus === 'synced') {
+      setSyncStatus('offline');
+    }
+  }, [refuelingsList]);
 
   // 3. Keep LocalStorage in sync immediately (always acts as local cache fallback)
   useEffect(() => {
@@ -338,7 +360,7 @@ export default function App() {
         setSyncStatus('synced');
       } catch (err) {
         console.error("Erro ao salvar no Firestore:", err);
-        setSyncStatus('offline');
+        setSyncStatus('error');
         alert("Erro ao salvar na nuvem. Verifique sua conexão ou permissões do Firebase.");
       }
     }
@@ -799,10 +821,22 @@ export default function App() {
 
             {/* Cloud status badge */}
             <div className="flex items-center gap-2 bg-slate-900/60 border border-white/5 rounded-full px-4 py-2 text-xs font-semibold">
+              {syncStatus === 'local-only' && (
+                <>
+                  <CloudOff className="w-4 h-4 text-amber-500" />
+                  <span className="text-amber-500" title="Firebase não configurado no arquivo .env. As alterações serão salvas apenas neste navegador localmente.">Apenas Local (Sem Nuvem)</span>
+                </>
+              )}
+              {syncStatus === 'error' && (
+                <>
+                  <CloudOff className="w-4 h-4 text-red-500 animate-pulse" />
+                  <span className="text-red-500" title="Ocorreu um erro ao sincronizar com o banco de dados. Suas regras do Firestore podem ter expirado ou há um erro de credencial.">Erro na Nuvem</span>
+                </>
+              )}
               {syncStatus === 'offline' && (
                 <>
-                  <CloudOff className="w-4 h-4 text-slate-400" />
-                  <span className="text-slate-400">Offline</span>
+                  <Cloud className="w-4 h-4 text-amber-300 animate-pulse" />
+                  <span className="text-amber-300" title="Você fez alterações locais que ainda não foram salvas na nuvem. Clique em 'Salvar Semana' ou 'Salvar Histórico'.">Pendente de Salvamento</span>
                 </>
               )}
               {syncStatus === 'loading' && (
@@ -911,6 +945,7 @@ export default function App() {
                 onOpenPassengersModal={() => setIsModalOpen(true)}
                 saveSuccess={saveSuccess}
                 disabled={viewMode === 'monthly'}
+                syncStatus={syncStatus}
               />
             </>
           )}

@@ -17,7 +17,8 @@ export default function SummarySidebar({
   onReset,
   onOpenPassengersModal,
   saveSuccess,
-  disabled = false
+  disabled = false,
+  syncStatus = 'local-only'
 }) {
 
   const [localGasPrice, setLocalGasPrice] = React.useState(() => gasPrice === 0 ? '' : String(gasPrice));
@@ -192,6 +193,33 @@ export default function SummarySidebar({
           </div>
         </div>
       </div>
+
+      {/* Sync Status Warning Banners */}
+      {syncStatus === 'local-only' && (
+        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-xs text-amber-200 flex flex-col gap-1.5 leading-relaxed">
+          <div className="flex items-center gap-1.5 font-bold text-amber-400">
+            <ShieldAlert className="w-4 h-4 text-amber-400" />
+            <span>Apenas Armazenamento Local</span>
+          </div>
+          <p>
+            O Firebase não está configurado. Alterações feitas neste navegador <strong>não serão sincronizadas</strong> com outros dispositivos/navegadores.
+          </p>
+          <span className="text-[10px] text-amber-400/80">Configure o arquivo <code>.env</code> com credenciais válidas.</span>
+        </div>
+      )}
+
+      {syncStatus === 'error' && (
+        <div className="rounded-2xl border border-red-500/25 bg-red-500/10 p-4 text-xs text-red-200 flex flex-col gap-1.5 leading-relaxed">
+          <div className="flex items-center gap-1.5 font-bold text-red-400 animate-pulse">
+            <ShieldAlert className="w-4 h-4 text-red-400" />
+            <span>Erro na Sincronização</span>
+          </div>
+          <p>
+            Não foi possível carregar ou salvar dados na nuvem. Suas <strong>Regras do Firestore</strong> no Firebase Console podem ter expirado ou as credenciais estão incorretas.
+          </p>
+          <span className="text-[10px] text-red-400/80 font-medium">Verifique o console do navegador para detalhes do erro.</span>
+        </div>
+      )}
 
       {/* 4. QUICK ACTIONS */}
       <div className="flex flex-col gap-3">
