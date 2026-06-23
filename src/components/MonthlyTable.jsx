@@ -41,9 +41,9 @@ export default function MonthlyTable({
       let val = defaultRate;
       
       if (cell && typeof cell === 'object') {
-        isPresent = cell.status === 'present';
+        isPresent = cell.status === 'present' || cell.status === 'paid';
         val = cell.value ?? defaultRate;
-      } else if (cell === 'present') {
+      } else if (cell === 'present' || cell === 'paid') {
         isPresent = true;
       }
       

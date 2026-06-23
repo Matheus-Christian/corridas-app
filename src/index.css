@@ -61,6 +61,10 @@
   box-shadow: 0 0 15px rgba(34, 197, 94, 0.25);
 }
 
+.glow-yellow {
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.25);
+}
+
 .glow-blue {
   box-shadow: 0 0 15px rgba(59, 130, 246, 0.25);
 }

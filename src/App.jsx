@@ -17,8 +17,11 @@ import { doc, onSnapshot, setDoc, getDocs, collection, query, orderBy, limit, ge
 export default function App() {
   const isPublicView = typeof window !== 'undefined' && (
     window.location.pathname.startsWith('/passageiros') ||
+    window.location.pathname.startsWith('/passageiro') ||
     window.location.hash.startsWith('#/passageiros') ||
+    window.location.hash.startsWith('#/passageiro') ||
     window.location.hash === '#passageiros' ||
+    window.location.hash === '#passageiro' ||
     new URLSearchParams(window.location.search).get('public') === 'true'
   );
 
@@ -229,6 +232,9 @@ export default function App() {
     }
     if (cell === 'present') {
       return { status: 'present', value: defaultRate };
+    }
+    if (cell === 'paid') {
+      return { status: 'paid', value: defaultRate };
     }
     return { status: 'off', value: 0 };
   };
@@ -663,7 +669,7 @@ export default function App() {
     });
   };
 
-  // Cell status toggling (Cycles: neutral -> present -> off -> neutral)
+  // Cell status toggling (Cycles: neutral -> present -> paid -> off -> neutral)
   const handleToggleCell = (passengerId, dayIdx) => {
     setState(prev => {
       const passenger = prev.passengers.find(p => p.id === passengerId);
@@ -679,6 +685,9 @@ export default function App() {
         nextStatus = 'present';
         nextValue = defaultRate;
       } else if (cellObj.status === 'present') {
+        nextStatus = 'paid';
+        nextValue = cellObj.value || defaultRate;
+      } else if (cellObj.status === 'paid') {
         nextStatus = 'off';
         nextValue = 0;
       } else {
@@ -704,19 +713,26 @@ export default function App() {
     const val = parseFloat(newValue);
     const parsedVal = isNaN(val) ? 0 : val;
     
-    setState(prev => ({
-      ...prev,
-      cellStates: {
-        ...prev.cellStates,
-        [passengerId]: {
-          ...prev.cellStates[passengerId],
-          [dayIdx]: {
-            status: 'present',
-            value: parsedVal
+    setState(prev => {
+      const currentCell = prev.cellStates[passengerId]?.[dayIdx];
+      const currentStatus = (currentCell && typeof currentCell === 'object' && currentCell.status) 
+        ? currentCell.status 
+        : 'present';
+
+      return {
+        ...prev,
+        cellStates: {
+          ...prev.cellStates,
+          [passengerId]: {
+            ...prev.cellStates[passengerId],
+            [dayIdx]: {
+              status: currentStatus,
+              value: parsedVal
+            }
           }
         }
-      }
-    }));
+      };
+    });
   };
 
   // Driver Status toggling (Cycles: neutral -> active -> off -> neutral)
@@ -881,7 +897,7 @@ export default function App() {
         if (dStatus === 'off' || dStatus === 'neutral') continue;
         const cell = state.cellStates[p.id]?.[day];
         const cellObj = getCellObject(cell, p.defaultRate);
-        if (cellObj.status === 'present') {
+        if (cellObj.status === 'present' || cellObj.status === 'paid') {
           totalGross += cellObj.value;
         }
       }
@@ -923,7 +939,7 @@ export default function App() {
           if (dStatus === 'off' || dStatus === 'neutral') continue;
           const cell = weekData.cellStates?.[p.id]?.[day];
           const cellObj = getCellObject(cell, p.defaultRate);
-          if (cellObj.status === 'present') {
+          if (cellObj.status === 'present' || cellObj.status === 'paid') {
             weekGross += cellObj.value;
           }
         }
@@ -1013,9 +1029,9 @@ export default function App() {
           let val = defaultRate;
           
           if (cell && typeof cell === 'object') {
-            isPresent = cell.status === 'present';
+            isPresent = cell.status === 'present' || cell.status === 'paid';
             val = cell.value ?? defaultRate;
-          } else if (cell === 'present') {
+          } else if (cell === 'present' || cell === 'paid') {
             isPresent = true;
           }
           

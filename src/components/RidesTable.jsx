@@ -66,6 +66,9 @@ export default function RidesTable({
     if (cell === 'present') {
       return { status: 'present', value: defaultRate };
     }
+    if (cell === 'paid') {
+      return { status: 'paid', value: defaultRate };
+    }
     return { status: 'off', value: 0 };
   };
 
@@ -77,7 +80,7 @@ export default function RidesTable({
       if (dStatus === 'off') continue;
       const cell = cellStates[passenger.id]?.[day];
       const cellObj = getCellObject(cell, dynamicRate);
-      if (cellObj.status === 'present') {
+      if (cellObj.status === 'present' || cellObj.status === 'paid') {
         total += cellObj.value;
       }
     }
@@ -92,7 +95,7 @@ export default function RidesTable({
       if (dStatus === 'off') continue;
       const cell = cellStates[passenger.id]?.[day];
       const cellObj = getCellObject(cell, dynamicRate);
-      if (cellObj.status === 'present') {
+      if (cellObj.status === 'present' || cellObj.status === 'paid') {
         count++;
       }
     }
@@ -304,9 +307,6 @@ export default function RidesTable({
                             }`}>
                               {passenger.name}
                             </div>
-                            <div className="text-[11px] text-slate-400 mt-0.5">
-                              Tarifa Base: {formatCurrency(passenger.defaultRate)}
-                            </div>
                           </div>
                         </div>
                       </div>
@@ -325,6 +325,8 @@ export default function RidesTable({
                       if (isDriverOff) {
                         cellClass = 'cell-blocked bg-slate-900/60 border border-dashed border-red-500/10 text-slate-500 hover:cursor-not-allowed';
                       } else if (cellObj.status === 'present') {
+                        cellClass = 'bg-amber-500/10 border border-amber-500/20 text-amber-400 hover:bg-amber-500/15 glow-yellow';
+                      } else if (cellObj.status === 'paid') {
                         cellClass = 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/15 glow-green';
                       } else if (cellObj.status === 'off') {
                         cellClass = 'bg-blue-500/5 border border-blue-500/10 text-blue-400/80 hover:bg-blue-500/10';
@@ -357,16 +359,20 @@ export default function RidesTable({
                               {/* Color Dot indicator */}
                               <span className={`w-2 h-2 rounded-full ${
                                 cellObj.status === 'present' 
-                                  ? 'bg-emerald-500' 
-                                  : cellObj.status === 'off'
-                                    ? 'bg-blue-400'
-                                    : 'bg-slate-600'
+                                  ? 'bg-amber-500' 
+                                  : cellObj.status === 'paid'
+                                    ? 'bg-emerald-500'
+                                    : cellObj.status === 'off'
+                                      ? 'bg-blue-400'
+                                      : 'bg-slate-600'
                               }`} />
                               
                               {/* Value rendering */}
-                              {cellObj.status === 'present' ? (
+                              {(cellObj.status === 'present' || cellObj.status === 'paid') ? (
                                 isPublicView ? (
-                                  <span className="font-bold text-emerald-400 text-[11px]">
+                                  <span className={`font-bold text-[11px] ${
+                                    cellObj.status === 'present' ? 'text-amber-400' : 'text-emerald-400'
+                                  }`}>
                                     R$ {cellObj.value.toFixed(2).replace('.', ',')}
                                   </span>
                                 ) : (
@@ -374,15 +380,21 @@ export default function RidesTable({
                                     className="flex items-center justify-center gap-0.5"
                                     onClick={(e) => e.stopPropagation()} // Stop clicking inside input from toggling presence
                                   >
-                                    <span className="text-[10px] text-emerald-500/70 font-normal animate-pulse-light">R$</span>
+                                    <span className={`text-[10px] font-normal animate-pulse-light ${
+                                      cellObj.status === 'present' ? 'text-amber-500/70' : 'text-emerald-500/70'
+                                    }`}>R$</span>
                                     <input
                                       type="number"
                                       step="0.01"
                                       min="0"
                                       value={cellObj.value === 0 ? '' : cellObj.value}
                                       onChange={(e) => onCellValChange(passenger.id, dayIdx, e.target.value)}
-                                      className="cell-rate-input w-12 bg-transparent text-center font-bold text-xs text-emerald-400 focus:outline-none focus:bg-emerald-500/10 rounded px-0.5 border-b border-dashed border-emerald-500/20 focus:border-emerald-400/50"
-                                      title="Editar valor pago"
+                                      className={`cell-rate-input w-12 bg-transparent text-center font-bold text-xs focus:outline-none rounded px-0.5 border-b border-dashed ${
+                                        cellObj.status === 'present' 
+                                          ? 'text-amber-400 focus:bg-amber-500/10 border-amber-500/20 focus:border-amber-400/50' 
+                                          : 'text-emerald-400 focus:bg-emerald-500/10 border-emerald-500/20 focus:border-emerald-400/50'
+                                      }`}
+                                      title={cellObj.status === 'present' ? "Editar valor Presença P" : "Editar valor Dia Pago"}
                                     />
                                   </div>
                                 )
@@ -420,24 +432,32 @@ export default function RidesTable({
       </div>
 
       {/* Legend Block */}
-      <div className="mt-6 pt-4 border-t border-white/5 flex flex-col gap-3">
-        <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Legenda de Status:</div>
-        <div className="flex flex-wrap gap-x-6 gap-y-2 justify-center sm:justify-start">
+      <div className="mt-6 pt-4 border-t border-white/5 flex flex-col gap-2.5">
+        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Legenda de Status:</div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
           <div className="flex items-center gap-2 text-xs text-slate-400">
-            <span className="w-3.5 h-3.5 rounded-full bg-slate-600 inline-block" />
-            <span>⚪ Neutro M/P (Sem Registro / Sem Custos)</span>
+            <span className="w-2.5 h-2.5 rounded-full bg-slate-600 inline-block" />
+            <span>Neutro (Sem Registro)</span>
           </div>
           <div className="flex items-center gap-2 text-xs text-slate-400">
-            <span className="w-3.5 h-3.5 rounded-full bg-emerald-500 inline-block glow-green" />
-            <span>🟢 Ativo M / Presença P (Gera Custos / Tarifa {isPublicView ? 'Fixada' : 'Editável'})</span>
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block glow-yellow" />
+            <span>Presença P</span>
           </div>
           <div className="flex items-center gap-2 text-xs text-slate-400">
-            <span className="w-3.5 h-3.5 rounded-full bg-blue-500 inline-block" />
-            <span>🔵 Folga Passageiro (R$ 0,00)</span>
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block glow-green" />
+            <span>Dia Pago</span>
           </div>
           <div className="flex items-center gap-2 text-xs text-slate-400">
-            <span className="w-3.5 h-3.5 rounded-full bg-red-500 inline-block" />
-            <span>🚫 Folga Motorista (Sem Corrida / Bloqueado)</span>
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" />
+            <span>Folga P (R$ 0,00)</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-slate-400">
+            <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" />
+            <span>Folga M (Sem Corrida)</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-slate-400">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block glow-green" />
+            <span>Ativo M (Motorista)</span>
           </div>
         </div>
       </div>
