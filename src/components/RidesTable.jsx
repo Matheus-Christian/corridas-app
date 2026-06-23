@@ -1,5 +1,5 @@
 import React from 'react';
-import { ToggleLeft, ToggleRight, Ban, User, CalendarDays, Coins, UserPlus, Trash2, Copy, Check } from 'lucide-react';
+import { ToggleLeft, ToggleRight, Ban, User, CalendarDays, Coins, UserPlus, Trash2 } from 'lucide-react';
 import { getDriverStatus, getPassengerRate } from '../utils/storage';
 
 const WEEK_DAYS = [
@@ -26,10 +26,10 @@ export default function RidesTable({
   onOpenSelectPassengersModal,
   onRemovePassenger,
   isPublicView = false,
-  pixKey = '',
+  passengerMonthlyTotals = {},
+  activeMonthName = '',
 }) {
   const [swipedPassengerId, setSwipedPassengerId] = React.useState(null);
-  const [copiedPassengerId, setCopiedPassengerId] = React.useState(null);
 
   React.useEffect(() => {
     if (!swipedPassengerId) return;
@@ -104,13 +104,6 @@ export default function RidesTable({
       style: 'currency',
       currency: 'BRL',
     });
-  };
-
-  const handleCopyPix = (passengerId) => {
-    if (!pixKey) return;
-    navigator.clipboard.writeText(pixKey);
-    setCopiedPassengerId(passengerId);
-    setTimeout(() => setCopiedPassengerId(null), 2000);
   };
 
   return (
@@ -223,9 +216,9 @@ export default function RidesTable({
                 Total Acumulado
               </th>
 
-              {/* PIX Column Header */}
-              <th className="text-center py-3.5 px-4 font-semibold text-slate-400 text-sm border-b border-white/5 w-24">
-                PIX
+              {/* Monthly Total Column Header */}
+              <th className="text-right py-3.5 px-4 font-semibold text-slate-400 text-sm border-b border-white/5 w-32">
+                Total {activeMonthName}
               </th>
             </tr>
           </thead>
@@ -414,33 +407,9 @@ export default function RidesTable({
                       </div>
                     </td>
 
-                    {/* PIX Cell */}
-                    <td className="py-4 px-4 text-center border-b border-white/5">
-                      {pixKey ? (
-                        <button
-                          onClick={() => handleCopyPix(passenger.id)}
-                          className={`inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer select-none ${
-                            copiedPassengerId === passenger.id
-                              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 shadow-sm'
-                              : 'bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-600 shadow-sm'
-                          }`}
-                          title="Copiar Chave PIX do Motorista"
-                        >
-                          {copiedPassengerId === passenger.id ? (
-                            <>
-                              <Check className="w-3.5 h-3.5" />
-                              <span className="text-[10px]">Copiado!</span>
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="w-3.5 h-3.5" />
-                              <span className="text-[10px]">PIX</span>
-                            </>
-                          )}
-                        </button>
-                      ) : (
-                        <span className="text-xs text-slate-500 font-medium">-</span>
-                      )}
+                    {/* Passenger Monthly Total Cell */}
+                    <td className="py-4 px-4 text-right font-bold text-emerald-400 text-sm border-b border-white/5">
+                      {formatCurrency(passengerMonthlyTotals[passenger.id] || 0)}
                     </td>
                   </tr>
                 );

@@ -207,6 +207,10 @@ export default function App() {
     }
     return today;
   });
+  const activeMonth = viewMode === 'monthly'
+    ? selectedMonth
+    : new Date(new Date(state.startDate + 'T00:00:00').getFullYear(), new Date(state.startDate + 'T00:00:00').getMonth(), 1);
+  const activeMonthTime = activeMonth.getTime();
   const [monthlyWeeksData, setMonthlyWeeksData] = useState({});
   const [isMonthlyLoading, setIsMonthlyLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -482,13 +486,11 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [refuelingsList, db, isPublicView, syncStatus]);
 
-  // 4. Batch load all weeks for the selected month (triggers when viewMode changes or selectedMonth shifts)
+  // 4. Batch load all weeks for the active month (triggers when activeMonth or active week updates)
   useEffect(() => {
-    if (viewMode !== 'monthly') return;
-
     const fetchMonthlyData = async () => {
       setIsMonthlyLoading(true);
-      const mondays = getMondaysInMonth(selectedMonth);
+      const mondays = getMondaysInMonth(activeMonth);
       const results = {};
 
       for (const mon of mondays) {
@@ -527,7 +529,7 @@ export default function App() {
     };
 
     fetchMonthlyData();
-  }, [viewMode, selectedMonth, state.startDate, state, db]);
+  }, [activeMonthTime, state.startDate, state, db]);
 
   const handleSave = async () => {
     // 1. Save locally
@@ -986,6 +988,52 @@ export default function App() {
   const { monthlyGross, monthlyNet, monthlyActiveDays } = calculateMonthlyTotals();
   const { avgGas, avgDaily, avgConsumption, avgEfficiency } = getMonthlyAverages();  const activeViewMode = (isPublicView && viewMode === 'refuelings') ? 'weekly' : viewMode;
 
+  // Get passenger monthly totals map for RidesTable BRL column
+  const getPassengerMonthlyTotalsMap = () => {
+    const mondays = getMondaysInMonth(activeMonth);
+    const totals = {};
+    
+    state.passengers.forEach(p => {
+      let total = 0;
+      mondays.forEach(mon => {
+        const weekData = state.startDate === mon ? state : monthlyWeeksData[mon];
+        if (!weekData) return;
+        
+        const pConfig = weekData.passengers?.find(wp => wp.id === p.id);
+        const defaultRate = pConfig 
+          ? getPassengerRate(pConfig, weekData.carEfficiency || 12, weekData.gasPrice || 5.99)
+          : p.defaultRate;
+          
+        for (let day = 0; day < 7; day++) {
+          const dStatus = getDriverStatus(day, weekData.driverStatus, weekData.driverOffDays);
+          if (dStatus === 'off' || dStatus === 'neutral') continue;
+          
+          const cell = weekData.cellStates?.[p.id]?.[day];
+          let isPresent = false;
+          let val = defaultRate;
+          
+          if (cell && typeof cell === 'object') {
+            isPresent = cell.status === 'present';
+            val = cell.value ?? defaultRate;
+          } else if (cell === 'present') {
+            isPresent = true;
+          }
+          
+          if (isPresent) {
+            total += val;
+          }
+        }
+      });
+      totals[p.id] = total;
+    });
+    
+    return totals;
+  };
+
+  const passengerMonthlyTotals = getPassengerMonthlyTotalsMap();
+  const activeMonthNameString = activeMonth.toLocaleDateString('pt-BR', { month: 'long' });
+  const formattedActiveMonthName = activeMonthNameString.charAt(0).toUpperCase() + activeMonthNameString.slice(1);
+
   return (
     <div className="relative min-h-screen w-full px-4 py-8 md:px-8 overflow-hidden">
       
@@ -1183,7 +1231,8 @@ export default function App() {
                     onOpenSelectPassengersModal={() => setIsSelectWeekModalOpen(true)}
                     onRemovePassenger={handleRemovePassengerFromWeek}
                     isPublicView={isPublicView}
-                    pixKey={state.pixKey || ''}
+                    passengerMonthlyTotals={passengerMonthlyTotals}
+                    activeMonthName={formattedActiveMonthName}
                   />
                   {!isPublicView && (
                     <PassengerRoutesTable
