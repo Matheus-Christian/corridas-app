@@ -69,15 +69,16 @@ export const getInitialData = () => {
 
 export const getPassengerRate = (passenger, carEfficiency, gasPrice) => {
   const eff = parseFloat(carEfficiency) || 12;
-  const price = parseFloat(gasPrice) || 0;
-  if (eff <= 0 || price <= 0) {
-    return passenger.defaultRate || 0;
-  }
+  const price = parseFloat(gasPrice) || 5.99; // Fallback to 5.99 if falsy or 0
   
   const idaKm = parseFloat(passenger.route?.ida?.km) || 0;
   const voltaKm = parseFloat(passenger.route?.volta?.km) || 0;
   
   if (idaKm === 0 && voltaKm === 0) {
+    return passenger.defaultRate || 0;
+  }
+  
+  if (eff <= 0 || price <= 0) {
     return passenger.defaultRate || 0;
   }
   

@@ -4,8 +4,8 @@ import { getPassengerRate } from '../utils/storage';
 
 export default function PassengerRoutesTable({
   passengers,
-  gasPrice,
-  carEfficiency,
+  gasPrice = 5.99,
+  carEfficiency = 12,
   onUpdatePassengerRoute,
 }) {
   const formatCurrency = (val) => {
@@ -15,9 +15,11 @@ export default function PassengerRoutesTable({
     });
   };
 
+  const price = parseFloat(gasPrice) || 5.99;
+  const eff = parseFloat(carEfficiency) || 12;
+
   const getPassengerTotalLiters = (p) => {
     const totalKm = (parseFloat(p.route?.ida?.km) || 0) + (parseFloat(p.route?.volta?.km) || 0);
-    const eff = parseFloat(carEfficiency) || 12;
     return eff > 0 ? totalKm / eff : 0;
   };
 
@@ -58,16 +60,16 @@ export default function PassengerRoutesTable({
               </tr>
             ) : (
               passengers.map((p) => {
-                const calculatedRate = getPassengerRate(p, carEfficiency, gasPrice);
+                const calculatedRate = getPassengerRate(p, eff, price);
                 const totalLiters = getPassengerTotalLiters(p);
                 
                 const idaKm = parseFloat(p.route?.ida?.km) || 0;
-                const idaLiters = carEfficiency > 0 ? idaKm / carEfficiency : 0;
-                const idaCost = idaLiters * gasPrice;
+                const idaLiters = eff > 0 ? idaKm / eff : 0;
+                const idaCost = idaLiters * price;
 
                 const voltaKm = parseFloat(p.route?.volta?.km) || 0;
-                const voltaLiters = carEfficiency > 0 ? voltaKm / carEfficiency : 0;
-                const voltaCost = voltaLiters * gasPrice;
+                const voltaLiters = eff > 0 ? voltaKm / eff : 0;
+                const voltaCost = voltaLiters * price;
 
                 return (
                   <tr key={p.id} className="hover:bg-white/[0.01] transition-colors">

@@ -509,45 +509,12 @@ export default function App() {
     });
   };
 
-  // Param updates
   const handleGasPriceChange = (price) => {
-    setState(prev => {
-      const nextCells = { ...prev.cellStates };
-      prev.passengers.forEach(p => {
-        const oldRate = getPassengerRate(p, prev.carEfficiency, prev.gasPrice);
-        const newRate = getPassengerRate(p, prev.carEfficiency, price);
-        if (oldRate !== newRate) {
-          for (let day = 0; day < 7; day++) {
-            const cell = nextCells[p.id]?.[day];
-            const cellObj = getCellObject(cell, oldRate);
-            if (cellObj.status === 'present' && (cellObj.value === oldRate || cellObj.value === p.defaultRate || cellObj.value === 0)) {
-              nextCells[p.id][day] = { ...cellObj, value: newRate };
-            }
-          }
-        }
-      });
-      return { ...prev, gasPrice: price, cellStates: nextCells };
-    });
+    setState(prev => ({ ...prev, gasPrice: price }));
   };
 
   const handleCarEfficiencyChange = (eff) => {
-    setState(prev => {
-      const nextCells = { ...prev.cellStates };
-      prev.passengers.forEach(p => {
-        const oldRate = getPassengerRate(p, prev.carEfficiency, prev.gasPrice);
-        const newRate = getPassengerRate(p, eff, prev.gasPrice);
-        if (oldRate !== newRate) {
-          for (let day = 0; day < 7; day++) {
-            const cell = nextCells[p.id]?.[day];
-            const cellObj = getCellObject(cell, oldRate);
-            if (cellObj.status === 'present' && (cellObj.value === oldRate || cellObj.value === p.defaultRate || cellObj.value === 0)) {
-              nextCells[p.id][day] = { ...cellObj, value: newRate };
-            }
-          }
-        }
-      });
-      return { ...prev, carEfficiency: eff, cellStates: nextCells };
-    });
+    setState(prev => ({ ...prev, carEfficiency: eff }));
   };
 
   const handleUpdatePassengerRoute = (passengerId, routeType, field, value) => {
@@ -570,29 +537,9 @@ export default function App() {
         return p;
       });
 
-      const nextCells = { ...prev.cellStates };
-      const targetPassenger = prev.passengers.find(p => p.id === passengerId);
-      const updatedPassenger = nextPassengers.find(p => p.id === passengerId);
-      
-      if (targetPassenger && updatedPassenger) {
-        const oldRate = getPassengerRate(targetPassenger, prev.carEfficiency, prev.gasPrice);
-        const newRate = getPassengerRate(updatedPassenger, prev.carEfficiency, prev.gasPrice);
-        
-        if (oldRate !== newRate) {
-          for (let day = 0; day < 7; day++) {
-            const cell = nextCells[passengerId]?.[day];
-            const cellObj = getCellObject(cell, oldRate);
-            if (cellObj.status === 'present' && (cellObj.value === oldRate || cellObj.value === targetPassenger.defaultRate || cellObj.value === 0)) {
-              nextCells[passengerId][day] = { ...cellObj, value: newRate };
-            }
-          }
-        }
-      }
-
       return {
         ...prev,
-        passengers: nextPassengers,
-        cellStates: nextCells
+        passengers: nextPassengers
       };
     });
   };
