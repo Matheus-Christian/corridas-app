@@ -77,10 +77,6 @@ export default function App() {
     }
   }, [theme]);
 
-  if (!isPublicView && !isAdminLoggedIn) {
-    return <LoginView onLoginSuccess={handleLoginSuccess} />;
-  }
-
   // Load week state with June 2026 limit check
   const [state, setState] = useState(() => {
     const loaded = loadData();
@@ -1050,23 +1046,29 @@ export default function App() {
   const activeMonthNameString = activeMonth.toLocaleDateString('pt-BR', { month: 'long' });
   const formattedActiveMonthName = activeMonthNameString.charAt(0).toUpperCase() + activeMonthNameString.slice(1);
 
+  if (!isPublicView && !isAdminLoggedIn) {
+    return <LoginView onLoginSuccess={handleLoginSuccess} />;
+  }
+
   return (
     <div className="relative min-h-screen w-full px-4 py-8 md:px-8 overflow-hidden">
       
-      {/* Decorative Blur Spheres (Background) */}
-      <div className="absolute top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2 w-[350px] h-[350px] bg-indigo-600/10 rounded-full blur-[100px] animate-float-slow pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2 w-[400px] h-[400px] bg-emerald-600/10 rounded-full blur-[120px] animate-float-delayed pointer-events-none" />
+      {/* Decorative Blur Spheres (Background) Wrapper to clip overflow */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none select-none z-0">
+        <div className="absolute top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2 w-[350px] h-[350px] bg-indigo-600/10 rounded-full blur-[100px] animate-float-slow" />
+        <div className="absolute bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2 w-[400px] h-[400px] bg-emerald-600/10 rounded-full blur-[120px] animate-float-delayed" />
+      </div>
 
       {/* Main Container */}
       <div className="relative max-w-6xl mx-auto flex flex-col gap-6">
         
         {/* Header App Title */}
-        <header className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-4 border-b border-white/5">
-          <div className="flex items-center gap-3">
+        <header className="flex flex-col md:flex-row items-center justify-between gap-4 pb-4 border-b border-white/5 w-full">
+          <div className="flex flex-col sm:flex-row items-center gap-3 text-center sm:text-left">
             <div className="p-3.5 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-2xl shadow-lg shadow-indigo-500/25">
               <CarFront className="w-7 h-7 text-white" />
             </div>
-            <div className="text-center sm:text-left">
+            <div>
               <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-slate-50 to-slate-200">
                 Caronas da Semana
               </h1>
@@ -1076,7 +1078,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center justify-center md:justify-end gap-3 w-full md:w-auto">
             {/* View Mode Segmented Control */}
             <div className="flex bg-slate-900/60 p-1 rounded-xl border border-white/5">
               <button

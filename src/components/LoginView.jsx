@@ -22,9 +22,11 @@ export default function LoginView({ onLoginSuccess }) {
 
   return (
     <div className="relative min-h-screen w-full flex items-center justify-center px-4 py-12 overflow-hidden">
-      {/* Decorative Blur Spheres (Background) */}
-      <div className="absolute top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] bg-indigo-600/10 rounded-full blur-[100px] pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2 w-[350px] h-[350px] bg-emerald-600/10 rounded-full blur-[120px] pointer-events-none" />
+      {/* Decorative Blur Spheres (Background) Wrapper to clip overflow */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none select-none z-0">
+        <div className="absolute top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] bg-indigo-600/10 rounded-full blur-[100px]" />
+        <div className="absolute bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2 w-[350px] h-[350px] bg-emerald-600/10 rounded-full blur-[120px]" />
+      </div>
 
       <div className="relative w-full max-w-md glass-panel rounded-3xl p-8 border border-white/10 shadow-2xl bg-slate-900/40">
         <div className="flex flex-col items-center gap-4 mb-8">
