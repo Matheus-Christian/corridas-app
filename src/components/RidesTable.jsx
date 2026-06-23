@@ -1,5 +1,5 @@
 import React from 'react';
-import { ToggleLeft, ToggleRight, Ban, User, CalendarDays, Coins } from 'lucide-react';
+import { ToggleLeft, ToggleRight, Ban, User, CalendarDays, Coins, UserPlus, Trash2 } from 'lucide-react';
 import { getDriverStatus, getPassengerRate } from '../utils/storage';
 
 const WEEK_DAYS = [
@@ -23,7 +23,27 @@ export default function RidesTable({
   onToggleDriverStatus,
   gasPrice = 5.99,
   carEfficiency = 12,
+  onOpenSelectPassengersModal,
+  onRemovePassenger,
 }) {
+  const [swipedPassengerId, setSwipedPassengerId] = React.useState(null);
+
+  React.useEffect(() => {
+    if (!swipedPassengerId) return;
+
+    const handleOutsideClick = () => {
+      setSwipedPassengerId(null);
+    };
+
+    const timer = setTimeout(() => {
+      document.addEventListener('click', handleOutsideClick);
+    }, 0);
+
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('click', handleOutsideClick);
+    };
+  }, [swipedPassengerId]);
   const start = new Date(startDate + 'T00:00:00');
 
   const getDayDate = (dayIndex) => {
@@ -86,8 +106,8 @@ export default function RidesTable({
     <div className="glass-panel rounded-3xl p-6 shadow-xl border border-white/10 w-full flex flex-col">
       
       {/* Table Header Section */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-white/5 pb-4 mb-4">
-        <div>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-white/5 pb-4 mb-4">
+        <div className="flex-1">
           <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
             <CalendarDays className="w-5 h-5 text-indigo-400" />
             Matriz de Caronas
@@ -97,9 +117,21 @@ export default function RidesTable({
           </p>
         </div>
 
-        {/* Mobile Swipe Hint */}
-        <div className="text-xs text-slate-400 flex items-center gap-1 sm:hidden bg-slate-900/60 px-3 py-1.5 rounded-full border border-white/5">
-          <span>↔️ Deslize para ver todos os dias</span>
+        <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 justify-end">
+          {/* Add passenger to week button */}
+          <button
+            onClick={onOpenSelectPassengersModal}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/10 hover:shadow-indigo-600/25 transition duration-200 cursor-pointer"
+            title="Selecionar os passageiros que participam desta semana"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>Selecionar Passageiros</span>
+          </button>
+
+          {/* Mobile Swipe Hint */}
+          <div className="text-xs text-slate-400 flex items-center gap-1 sm:hidden bg-slate-900/60 px-3 py-2 rounded-xl border border-white/5">
+            <span>↔️ Deslize</span>
+          </div>
         </div>
       </div>
 
@@ -171,8 +203,23 @@ export default function RidesTable({
           <tbody className="divide-y divide-white/5">
             {passengers.length === 0 ? (
               <tr>
-                <td colSpan={9} className="py-8 text-center text-slate-400 text-sm">
-                  Nenhum passageiro configurado. Adicione no painel lateral.
+                <td colSpan={9} className="py-12 text-center">
+                  <div className="flex flex-col items-center justify-center gap-3 py-4 max-w-sm mx-auto">
+                    <div className="p-4 bg-indigo-500/10 text-indigo-400 rounded-3xl border border-indigo-500/25 shadow-lg shadow-indigo-500/5">
+                      <UserPlus className="w-8 h-8" />
+                    </div>
+                    <div className="text-slate-200 text-base font-bold mt-1">Matriz de Caronas Vazia</div>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      Esta semana não tem passageiros ativos. Clique no botão abaixo para selecionar quais passageiros participarão das caronas.
+                    </p>
+                    <button
+                      onClick={onOpenSelectPassengersModal}
+                      className="mt-2 flex items-center gap-2 py-2.5 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-lg shadow-indigo-600/20 transition cursor-pointer"
+                    >
+                      <UserPlus className="w-4 h-4" />
+                      Selecionar Passageiros
+                    </button>
+                  </div>
                 </td>
               </tr>
             ) : (
@@ -187,16 +234,49 @@ export default function RidesTable({
                   >
                     {/* Passenger Info Cell */}
                     <td className="py-4 px-4 border-b border-white/5">
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-indigo-500/10 text-indigo-400 flex items-center justify-center font-bold text-xs">
-                          {passenger.name.charAt(0).toUpperCase()}
+                      <div className="flex items-center overflow-hidden w-full">
+                        {/* Excluir/Delete Button Container */}
+                        <div
+                          className={`transition-all duration-300 ease-out flex items-center justify-center ${
+                            swipedPassengerId === passenger.id ? 'w-10 opacity-100 mr-2.5' : 'w-0 opacity-0'
+                          }`}
+                        >
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onRemovePassenger(passenger.id);
+                            }}
+                            className="p-2 bg-red-600 hover:bg-red-500 text-white rounded-xl shadow-md transition duration-150 active:scale-95 flex items-center justify-center cursor-pointer"
+                            title="Remover passageiro desta semana"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
-                        <div>
-                          <div className="text-sm font-semibold text-slate-200 leading-tight">
-                            {passenger.name}
+
+                        {/* Passenger Details (Click to toggle swiped state) */}
+                        <div
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSwipedPassengerId(prev => prev === passenger.id ? null : passenger.id);
+                          }}
+                          className="flex items-center gap-2 cursor-pointer select-none transition-transform duration-300"
+                        >
+                          <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs transition duration-200 ${
+                            swipedPassengerId === passenger.id 
+                              ? 'bg-red-500/10 text-red-500' 
+                              : 'bg-indigo-500/10 text-indigo-400'
+                          }`}>
+                            {passenger.name.charAt(0).toUpperCase()}
                           </div>
-                          <div className="text-[11px] text-slate-400 mt-0.5">
-                            Padrão: {formatCurrency(getPassengerRate(passenger, carEfficiency, gasPrice))}
+                          <div>
+                            <div className={`text-sm font-semibold leading-tight transition duration-200 ${
+                              swipedPassengerId === passenger.id ? 'text-red-400' : 'text-slate-200'
+                            }`}>
+                              {passenger.name}
+                            </div>
+                            <div className="text-[11px] text-slate-400 mt-0.5">
+                              Tarifa Base: {formatCurrency(passenger.defaultRate)}
+                            </div>
                           </div>
                         </div>
                       </div>

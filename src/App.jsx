@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { loadData, saveData, getInitialData, getMonday, formatDateISO, getDriverStatus, getPassengerRate } from './utils/storage';
+import { loadData, saveData, getInitialData, getMonday, formatDateISO, getDriverStatus, getPassengerRate, DEFAULT_PASSENGERS } from './utils/storage';
 import DateSelector from './components/DateSelector';
 import SummarySidebar from './components/SummarySidebar';
 import RidesTable from './components/RidesTable';
 import PassengerModal from './components/PassengerModal';
+import SelectWeekPassengersModal from './components/SelectWeekPassengersModal';
 import MonthlySelector from './components/MonthlySelector';
 import MonthlyTable from './components/MonthlyTable';
 import RefuelingsView from './components/RefuelingsView';
@@ -49,6 +50,44 @@ export default function App() {
   });
   const [viewMode, setViewMode] = useState('weekly'); // 'weekly' | 'monthly' | 'refuelings'
   
+  const [globalPassengers, setGlobalPassengers] = useState(() => {
+    try {
+      const stored = localStorage.getItem('caronas_global_passengers');
+      return stored ? JSON.parse(stored) : DEFAULT_PASSENGERS;
+    } catch (e) {
+      console.error("Erro ao carregar passageiros globais do LocalStorage:", e);
+      return DEFAULT_PASSENGERS;
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('caronas_global_passengers', JSON.stringify(globalPassengers));
+  }, [globalPassengers]);
+
+  // Load global passengers from Firestore on start
+  useEffect(() => {
+    if (!db) return;
+
+    const loadGlobalPassengersFromFirestore = async () => {
+      try {
+        const docRef = doc(db, 'settings', 'passengers');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.list) {
+            skipGlobalPassengersSyncStatusChangeRef.current = true;
+            setGlobalPassengers(data.list);
+          }
+        }
+      } catch (err) {
+        console.error("Erro ao buscar passageiros globais do Firestore:", err);
+        setSyncStatus('error');
+      }
+    };
+
+    loadGlobalPassengersFromFirestore();
+  }, [db]);
+
   const [refuelingsList, setRefuelingsList] = useState(() => {
     try {
       const stored = localStorage.getItem('caronas_abastecimentos_data');
@@ -133,11 +172,13 @@ export default function App() {
   const [monthlyWeeksData, setMonthlyWeeksData] = useState({});
   const [isMonthlyLoading, setIsMonthlyLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSelectWeekModalOpen, setIsSelectWeekModalOpen] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [syncStatus, setSyncStatus] = useState(() => (db ? 'loading' : 'local-only'));
 
   const skipSyncStatusChangeRef = React.useRef(false);
   const skipRefuelingsSyncStatusChangeRef = React.useRef(false);
+  const skipGlobalPassengersSyncStatusChangeRef = React.useRef(false);
 
   // Helper to ensure cell states are objects with status and value fields (defensive parsing)
   const getCellObject = (cell, defaultRate) => {
@@ -205,23 +246,16 @@ export default function App() {
       const exists = localStorage.getItem(key) !== null;
       
       let passengersToUse = loaded.passengers;
+      let cellStatesToUse = loaded.cellStates;
       if (!exists) {
-        passengersToUse = loaded.passengers.map(p => {
-          const route = p.route || { ida: { from: '', to: '', km: 0 }, volta: { from: '', to: '', km: 0 } };
-          return {
-            ...p,
-            route: {
-              ...route,
-              ida: { ...route.ida, km: p.defaultIdaKm ?? 0 },
-              volta: { ...route.volta, km: p.defaultVoltaKm ?? 0 }
-            }
-          };
-        });
+        passengersToUse = [];
+        cellStatesToUse = {};
       }
       
       const nextData = {
         ...loaded,
-        passengers: passengersToUse
+        passengers: passengersToUse,
+        cellStates: cellStatesToUse
       };
       
       setState(currentLocal => {
@@ -260,7 +294,6 @@ export default function App() {
           const q = query(weeksColl, orderBy('startDate', 'desc'), limit(1));
           const querySnap = await getDocs(q);
 
-          let passengersToUse = state.passengers;
           let gasPriceToUse = state.gasPrice;
           let dailyBasicToUse = state.dailyBasicValue;
           let dailyConsumptionToUse = state.dailyConsumption;
@@ -268,7 +301,6 @@ export default function App() {
 
           if (!querySnap.empty) {
             const latestDoc = querySnap.docs[0].data();
-            passengersToUse = latestDoc.passengers || state.passengers;
             gasPriceToUse = latestDoc.gasPrice ?? state.gasPrice;
             dailyBasicToUse = latestDoc.dailyBasicValue ?? state.dailyBasicValue;
             dailyConsumptionToUse = latestDoc.dailyConsumption ?? state.dailyConsumption;
@@ -276,12 +308,6 @@ export default function App() {
           }
 
           const initialCells = {};
-          passengersToUse.forEach(p => {
-            initialCells[p.id] = {};
-            for (let day = 0; day < 7; day++) {
-              initialCells[p.id][day] = { status: 'neutral', value: 0 };
-            }
-          });
 
           const initialDriverStatus = {
             0: 'neutral', 1: 'neutral', 2: 'neutral', 3: 'neutral', 4: 'neutral', 5: 'neutral', 6: 'neutral'
@@ -289,24 +315,6 @@ export default function App() {
           const initialDriverOff = {
             0: false, 1: false, 2: false, 3: false, 4: false, 5: false, 6: false
           };
-
-          const initializedPassengers = passengersToUse.map(p => {
-            const route = p.route || { ida: { from: '', to: '', km: 0 }, volta: { from: '', to: '', km: 0 } };
-            return {
-              ...p,
-              route: {
-                ...route,
-                ida: {
-                  ...route.ida,
-                  km: p.defaultIdaKm !== undefined ? p.defaultIdaKm : 0
-                },
-                volta: {
-                  ...route.volta,
-                  km: p.defaultVoltaKm !== undefined ? p.defaultVoltaKm : 0
-                }
-              }
-            };
-          });
 
           const newWeekData = {
             startDate: state.startDate,
@@ -316,7 +324,7 @@ export default function App() {
             dailyConsumption: dailyConsumptionToUse,
             driverStatus: initialDriverStatus,
             driverOffDays: initialDriverOff,
-            passengers: initializedPassengers,
+            passengers: [],
             cellStates: initialCells,
           };
 
@@ -354,6 +362,17 @@ export default function App() {
       setSyncStatus('offline');
     }
   }, [refuelingsList]);
+
+  // Mark status as offline (unsaved changes) when global passengers are updated
+  useEffect(() => {
+    if (skipGlobalPassengersSyncStatusChangeRef.current) {
+      skipGlobalPassengersSyncStatusChangeRef.current = false;
+      return;
+    }
+    if (syncStatus === 'synced') {
+      setSyncStatus('offline');
+    }
+  }, [globalPassengers]);
 
   // 3. Keep LocalStorage in sync immediately (always acts as local cache fallback)
   useEffect(() => {
@@ -455,65 +474,61 @@ export default function App() {
   };
 
   // Passenger Handlers
-  const handleSavePassengers = (newPassengers) => {
+  const handleSaveGlobalPassengers = async (updatedGlobalPassengers) => {
+    setGlobalPassengers(updatedGlobalPassengers);
+    
+    // Save to LocalStorage immediately
+    try {
+      localStorage.setItem('caronas_global_passengers', JSON.stringify(updatedGlobalPassengers));
+    } catch (e) {
+      console.error("Erro ao salvar passageiros globais localmente:", e);
+    }
+
+    // Save to Firestore settings/passengers
+    if (db) {
+      setSyncStatus('syncing');
+      try {
+        const docRef = doc(db, 'settings', 'passengers');
+        await setDoc(docRef, {
+          list: updatedGlobalPassengers,
+          updatedAt: new Date().toISOString()
+        });
+        setSyncStatus('synced');
+      } catch (err) {
+        console.error("Erro ao salvar passageiros globais no Firestore:", err);
+        setSyncStatus('error');
+        alert("Erro ao salvar passageiros globais na nuvem. Verifique suas regras do Firestore.");
+      }
+    }
+  };
+
+  const handleSaveWeekPassengers = (selectedIds) => {
     setState(prev => {
+      const nextPassengers = [];
       const nextCells = { ...prev.cellStates };
       
-      const updatedPassengers = newPassengers.map(np => {
-        const oldP = prev.passengers.find(p => p.id === np.id);
-        const oldRate = oldP ? oldP.defaultRate : np.defaultRate;
-        const newRate = np.defaultRate;
-        
-        let route = np.route || (oldP && oldP.route) || { ida: { from: '', to: '', km: 0 }, volta: { from: '', to: '', km: 0 } };
-        
-        if (!oldP) {
-          // New passenger
-          route = {
-            ...route,
-            ida: { ...route.ida, km: np.defaultIdaKm ?? 0 },
-            volta: { ...route.volta, km: np.defaultVoltaKm ?? 0 }
-          };
-        } else {
-          // Existing passenger - update route km if default km changed in the modal
-          const defaultIdaChanged = oldP.defaultIdaKm !== np.defaultIdaKm;
-          const defaultVoltaChanged = oldP.defaultVoltaKm !== np.defaultVoltaKm;
+      selectedIds.forEach(id => {
+        const globalP = globalPassengers.find(p => p.id === id);
+        if (globalP) {
+          const existingP = prev.passengers.find(p => p.id === id);
+          nextPassengers.push(existingP || {
+            ...globalP,
+            route: {
+              ida: { from: '', to: '', km: globalP.defaultIdaKm ?? 0 },
+              volta: { from: '', to: '', km: globalP.defaultVoltaKm ?? 0 }
+            }
+          });
           
-          route = {
-            ...route,
-            ida: {
-              ...route.ida,
-              km: defaultIdaChanged ? (np.defaultIdaKm ?? 0) : (route.ida?.km ?? 0)
-            },
-            volta: {
-              ...route.volta,
-              km: defaultVoltaChanged ? (np.defaultVoltaKm ?? 0) : (route.volta?.km ?? 0)
-            }
-          };
-        }
-
-        if (!nextCells[np.id]) {
-          nextCells[np.id] = {};
-          for (let day = 0; day < 7; day++) {
-            nextCells[np.id][day] = { status: 'present', value: newRate };
-          }
-        } else if (oldRate !== newRate) {
-          for (let day = 0; day < 7; day++) {
-            const cell = nextCells[np.id][day];
-            const cellObj = getCellObject(cell, oldRate);
-            
-            if (cellObj.status === 'present' && cellObj.value === oldRate) {
-              nextCells[np.id][day] = { ...cellObj, value: newRate };
+          if (!nextCells[id]) {
+            nextCells[id] = {};
+            for (let day = 0; day < 7; day++) {
+              nextCells[id][day] = { status: 'neutral', value: 0 };
             }
           }
         }
-        
-        return {
-          ...np,
-          route
-        };
       });
       
-      const activeIds = newPassengers.map(p => p.id);
+      const activeIds = nextPassengers.map(p => p.id);
       Object.keys(nextCells).forEach(id => {
         if (!activeIds.includes(id)) {
           delete nextCells[id];
@@ -522,7 +537,21 @@ export default function App() {
       
       return {
         ...prev,
-        passengers: updatedPassengers,
+        passengers: nextPassengers,
+        cellStates: nextCells
+      };
+    });
+  };
+
+  const handleRemovePassengerFromWeek = (passengerId) => {
+    setState(prev => {
+      const nextPassengers = prev.passengers.filter(p => p.id !== passengerId);
+      const nextCells = { ...prev.cellStates };
+      delete nextCells[passengerId];
+      
+      return {
+        ...prev,
+        passengers: nextPassengers,
         cellStates: nextCells
       };
     });
@@ -532,17 +561,17 @@ export default function App() {
   const handleToggleCell = (passengerId, dayIdx) => {
     setState(prev => {
       const passenger = prev.passengers.find(p => p.id === passengerId);
-      const dynamicRate = passenger ? getPassengerRate(passenger, prev.carEfficiency, prev.gasPrice) : 8.00;
+      const defaultRate = passenger ? passenger.defaultRate : 8.00;
       
       const cell = prev.cellStates[passengerId]?.[dayIdx];
-      const cellObj = getCellObject(cell, dynamicRate);
+      const cellObj = getCellObject(cell, defaultRate);
       
       let nextStatus = 'neutral';
       let nextValue = 0;
       
       if (cellObj.status === 'neutral') {
         nextStatus = 'present';
-        nextValue = dynamicRate;
+        nextValue = defaultRate;
       } else if (cellObj.status === 'present') {
         nextStatus = 'off';
         nextValue = 0;
@@ -980,6 +1009,8 @@ export default function App() {
                     onToggleDriverStatus={handleToggleDriverStatus}
                     gasPrice={state.gasPrice}
                     carEfficiency={state.carEfficiency || 12}
+                    onOpenSelectPassengersModal={() => setIsSelectWeekModalOpen(true)}
+                    onRemovePassenger={handleRemovePassengerFromWeek}
                   />
                   <PassengerRoutesTable
                     passengers={state.passengers}
@@ -1025,8 +1056,17 @@ export default function App() {
       <PassengerModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        passengers={state.passengers}
-        onSave={handleSavePassengers}
+        passengers={globalPassengers}
+        onSave={handleSaveGlobalPassengers}
+      />
+
+      {/* Week passenger selection modal */}
+      <SelectWeekPassengersModal
+        isOpen={isSelectWeekModalOpen}
+        onClose={() => setIsSelectWeekModalOpen(false)}
+        globalPassengers={globalPassengers}
+        selectedPassengerIds={state.passengers.map(p => p.id)}
+        onSave={handleSaveWeekPassengers}
       />
 
     </div>

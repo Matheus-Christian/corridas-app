@@ -31,14 +31,7 @@ export const getInitialData = () => {
   const today = new Date();
   const monday = getMonday(today);
   
-  // Set default cells
   const initialCells = {};
-  DEFAULT_PASSENGERS.forEach(p => {
-    initialCells[p.id] = {};
-    for (let day = 0; day < 7; day++) {
-      initialCells[p.id][day] = { status: 'neutral', value: 0 }; // Neutral by default
-    }
-  });
 
   const initialDriverStatus = {
     0: 'neutral', // Seg
@@ -55,7 +48,7 @@ export const getInitialData = () => {
   };
 
   return {
-    passengers: DEFAULT_PASSENGERS,
+    passengers: [],
     gasPrice: 5.99,
     carEfficiency: 12.0,
     dailyBasicValue: 21.00,
