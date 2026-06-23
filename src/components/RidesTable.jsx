@@ -77,7 +77,7 @@ export default function RidesTable({
     const dynamicRate = getPassengerRate(passenger, carEfficiency, gasPrice);
     for (let day = 0; day < 7; day++) {
       const dStatus = getDriverStatus(day, driverStatus, driverOffDays);
-      if (dStatus === 'off') continue;
+      if (dStatus === 'off' || dStatus === 'neutral') continue;
       const cell = cellStates[passenger.id]?.[day];
       const cellObj = getCellObject(cell, dynamicRate);
       if (cellObj.status === 'present' || cellObj.status === 'paid') {
@@ -92,7 +92,7 @@ export default function RidesTable({
     const dynamicRate = getPassengerRate(passenger, carEfficiency, gasPrice);
     for (let day = 0; day < 7; day++) {
       const dStatus = getDriverStatus(day, driverStatus, driverOffDays);
-      if (dStatus === 'off') continue;
+      if (dStatus === 'off' || dStatus === 'neutral') continue;
       const cell = cellStates[passenger.id]?.[day];
       const cellObj = getCellObject(cell, dynamicRate);
       if (cellObj.status === 'present' || cellObj.status === 'paid') {
@@ -216,7 +216,7 @@ export default function RidesTable({
 
               {/* Passenger Total Column Header */}
               <th className="text-right py-3.5 px-4 font-semibold text-slate-400 text-sm border-b border-white/5 w-28">
-                Total Acumulado
+                Total Semana
               </th>
 
               {/* Monthly Total Column Header */}
