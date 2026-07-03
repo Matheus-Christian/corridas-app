@@ -8,9 +8,10 @@ import SelectWeekPassengersModal from './components/SelectWeekPassengersModal';
 import MonthlySelector from './components/MonthlySelector';
 import MonthlyTable from './components/MonthlyTable';
 import RefuelingsView from './components/RefuelingsView';
+import BackupView from './components/BackupView';
 import PassengerRoutesTable from './components/PassengerRoutesTable';
 import LoginView from './components/LoginView';
-import { CarFront, Cloud, CloudOff, CalendarDays, CalendarRange, Fuel, Sun, Moon, LogOut } from 'lucide-react';
+import { CarFront, Cloud, CloudOff, CalendarDays, CalendarRange, Fuel, Sun, Moon, LogOut, Database } from 'lucide-react';
 import { db } from './firebase';
 import { doc, onSnapshot, setDoc, getDocs, collection, query, orderBy, limit, getDoc } from 'firebase/firestore';
 
@@ -86,6 +87,25 @@ export default function App() {
     return loaded;
   });
   const [viewMode, setViewMode] = useState('weekly'); // 'weekly' | 'monthly' | 'refuelings'
+  
+  const [googleClientId, setGoogleClientId] = useState(() => {
+    return import.meta.env.VITE_GOOGLE_CLIENT_ID || localStorage.getItem('caronas_google_client_id') || '';
+  });
+  const [googleToken, setGoogleToken] = useState(() => {
+    return localStorage.getItem('caronas_google_token') || '';
+  });
+  const [googleUser, setGoogleUser] = useState(() => {
+    return localStorage.getItem('caronas_google_user') || '';
+  });
+  const [driveFiles, setDriveFiles] = useState([]);
+  const [isDriveLoading, setIsDriveLoading] = useState(false);
+  const [backupFrequency, setBackupFrequency] = useState(() => {
+    return localStorage.getItem('caronas_backup_frequency') || 'disabled';
+  });
+  const [lastAutoBackupTime, setLastAutoBackupTime] = useState(() => {
+    const val = localStorage.getItem('caronas_last_auto_backup_time');
+    return val ? parseInt(val, 10) : 0;
+  });
   
   const [globalPassengers, setGlobalPassengers] = useState(() => {
     try {
@@ -215,6 +235,457 @@ export default function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSelectWeekModalOpen, setIsSelectWeekModalOpen] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Load Google Identity Services script
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    document.body.appendChild(script);
+    
+    return () => {
+      try {
+        document.body.removeChild(script);
+      } catch {}
+    };
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('caronas_backup_frequency', backupFrequency);
+  }, [backupFrequency]);
+
+  const isTokenValid = () => {
+    if (!googleToken) return false;
+    const expiryStr = localStorage.getItem('caronas_google_token_expiry');
+    if (!expiryStr) return false;
+    const expiry = parseInt(expiryStr, 10);
+    return Date.now() < expiry - 5 * 60 * 1000;
+  };
+
+  const handleSaveGoogleClientId = (id) => {
+    setGoogleClientId(id);
+    localStorage.setItem('caronas_google_client_id', id);
+  };
+
+  const handleConnectGoogle = () => {
+    if (!googleClientId) {
+      alert("Por favor, configure o Google Client ID primeiro.");
+      return;
+    }
+    
+    if (window.google && window.google.accounts && window.google.accounts.oauth2) {
+      try {
+        const client = window.google.accounts.oauth2.initTokenClient({
+          client_id: googleClientId,
+          scope: 'https://www.googleapis.com/auth/drive.file',
+          callback: (tokenResponse) => {
+            if (tokenResponse.access_token) {
+              setGoogleToken(tokenResponse.access_token);
+              localStorage.setItem('caronas_google_token', tokenResponse.access_token);
+              const expiryTime = Date.now() + tokenResponse.expires_in * 1000;
+              localStorage.setItem('caronas_google_token_expiry', String(expiryTime));
+              
+              fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                headers: { Authorization: `Bearer ${tokenResponse.access_token}` }
+              })
+              .then(res => res.json())
+              .then(info => {
+                if (info.email) {
+                  setGoogleUser(info.email);
+                  localStorage.setItem('caronas_google_user', info.email);
+                }
+              })
+              .catch(() => {});
+              
+              alert("Google Drive conectado com sucesso!");
+              loadDriveBackups(tokenResponse.access_token);
+            }
+          },
+        });
+        client.requestAccessToken({ prompt: 'consent' });
+      } catch (err) {
+        console.error("Erro ao conectar Google:", err);
+        alert("Erro ao iniciar login do Google. Verifique o console ou seu Client ID.");
+      }
+    } else {
+      alert("O script de login do Google está sendo carregado. Tente novamente em alguns segundos.");
+    }
+  };
+
+  const handleDisconnectGoogle = () => {
+    if (googleToken && window.google && window.google.accounts && window.google.accounts.oauth2) {
+      try {
+        window.google.accounts.oauth2.revoke(googleToken, () => {});
+      } catch {}
+    }
+    setGoogleToken('');
+    setGoogleUser('');
+    setDriveFiles([]);
+    localStorage.removeItem('caronas_google_token');
+    localStorage.removeItem('caronas_google_token_expiry');
+    localStorage.removeItem('caronas_google_user');
+    alert("Google Drive desconectado.");
+  };
+
+  const getOrCreateBackupFolder = async (token) => {
+    const queryStr = encodeURIComponent("name = 'CaronasApp_Backups' and mimeType = 'application/vnd.google-apps.folder' and trashed = false");
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${queryStr}&fields=files(id)`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const result = await res.json();
+    if (result.files && result.files.length > 0) {
+      return result.files[0].id;
+    }
+    const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        name: 'CaronasApp_Backups',
+        mimeType: 'application/vnd.google-apps.folder'
+      })
+    });
+    const folder = await createRes.json();
+    return folder.id;
+  };
+
+  const uploadBackupToDrive = async (token, folderId, fileName, fileContent) => {
+    const metadata = {
+      name: fileName,
+      parents: [folderId],
+      mimeType: 'application/json'
+    };
+    const boundary = 'caronas_app_backup_multipart_boundary';
+    const delimiter = `\r\n--${boundary}\r\n`;
+    const closeDelimiter = `\r\n--${boundary}--`;
+    const body = 
+      delimiter +
+      'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+      JSON.stringify(metadata) +
+      delimiter +
+      'Content-Type: application/json\r\n\r\n' +
+      JSON.stringify(fileContent) +
+      closeDelimiter;
+
+    const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': `multipart/related; boundary=${boundary}`
+      },
+      body: body
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Erro ao enviar: ${errText}`);
+    }
+    return await res.json();
+  };
+
+  const listBackupsFromDrive = async (token, folderId) => {
+    const queryStr = encodeURIComponent(`'${folderId}' in parents and mimeType = 'application/json' and name contains 'CaronasApp_Backup_' and trashed = false`);
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${queryStr}&orderBy=createdTime desc&fields=files(id,name,size,createdTime)&pageSize=30`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error("Erro ao buscar arquivos");
+    const result = await res.json();
+    return result.files || [];
+  };
+
+  const downloadFileContent = async (token, fileId) => {
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error("Erro ao baixar");
+    return await res.json();
+  };
+
+  const deleteFileFromDrive = async (token, fileId) => {
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error("Erro ao deletar");
+    return true;
+  };
+
+  const loadDriveBackups = async (tokenToUse = googleToken) => {
+    if (!tokenToUse) return;
+    setIsDriveLoading(true);
+    try {
+      const folderId = await getOrCreateBackupFolder(tokenToUse);
+      const files = await listBackupsFromDrive(tokenToUse, folderId);
+      setDriveFiles(files);
+    } catch (err) {
+      console.error(err);
+      if (err.message && err.message.includes('401')) {
+        handleDisconnectGoogle();
+      }
+    } finally {
+      setIsDriveLoading(false);
+    }
+  };
+
+  const handleSaveToDrive = async () => {
+    if (!isTokenValid()) {
+      alert("Token do Google Drive expirado. Por favor, conecte-se novamente.");
+      handleDisconnectGoogle();
+      return;
+    }
+    setIsDriveLoading(true);
+    try {
+      const folderId = await getOrCreateBackupFolder(googleToken);
+      const data = await gatherAllSystemData();
+      const now = new Date();
+      const dateStr = formatDateISO(now);
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+      const fileName = `CaronasApp_Backup_Manual_${dateStr}_${timeStr}.json`;
+      await uploadBackupToDrive(googleToken, folderId, fileName, data);
+      alert("Backup salvo no Google Drive com sucesso!");
+      loadDriveBackups(googleToken);
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao salvar backup no Google Drive.");
+    } finally {
+      setIsDriveLoading(false);
+    }
+  };
+
+  const handleRestoreFromDrive = async (fileId) => {
+    if (!isTokenValid()) {
+      alert("Token do Google Drive expirado. Por favor, conecte-se novamente.");
+      handleDisconnectGoogle();
+      return;
+    }
+    setIsDriveLoading(true);
+    try {
+      const backupData = await downloadFileContent(googleToken, fileId);
+      const success = await handleRestoreData(backupData);
+      if (success) {
+        setViewMode('weekly');
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao restaurar backup.");
+    } finally {
+      setIsDriveLoading(false);
+    }
+  };
+
+  const handleDeleteFromDrive = async (fileId) => {
+    if (!isTokenValid()) {
+      alert("Token do Google Drive expirado. Por favor, conecte-se novamente.");
+      handleDisconnectGoogle();
+      return;
+    }
+    setIsDriveLoading(true);
+    try {
+      await deleteFileFromDrive(googleToken, fileId);
+      alert("Backup removido do Google Drive.");
+      loadDriveBackups(googleToken);
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao remover backup.");
+    } finally {
+      setIsDriveLoading(false);
+    }
+  };
+
+  const handleExportLocal = async () => {
+    try {
+      const data = await gatherAllSystemData();
+      const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
+        JSON.stringify(data, null, 2)
+      )}`;
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute('href', jsonString);
+      const now = new Date();
+      const dateStr = formatDateISO(now);
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+      downloadAnchor.setAttribute('download', `CaronasApp_Backup_${dateStr}_${timeStr}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao exportar dados.");
+    }
+  };
+
+  const handleImportLocal = async (parsedData) => {
+    const success = await handleRestoreData(parsedData);
+    if (success) {
+      setViewMode('weekly');
+    }
+  };
+
+  const gatherAllSystemData = async () => {
+    const weeks = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key === 'caronas_semanais_data') {
+        try {
+          const wData = JSON.parse(localStorage.getItem(key));
+          if (wData && wData.startDate) {
+            weeks[wData.startDate] = wData;
+          }
+        } catch {}
+      } else if (key.startsWith('caronas_semanais_data_')) {
+        const dateStr = key.replace('caronas_semanais_data_', '');
+        try {
+          const wData = JSON.parse(localStorage.getItem(key));
+          if (wData) {
+            weeks[dateStr] = wData;
+          }
+        } catch {}
+      }
+    }
+
+    if (db) {
+      try {
+        const querySnapshot = await getDocs(collection(db, 'weeks'));
+        querySnapshot.forEach((doc) => {
+          weeks[doc.id] = {
+            ...weeks[doc.id],
+            ...doc.data()
+          };
+        });
+      } catch (err) {
+        console.error("Erro ao carregar semanas do Firestore:", err);
+      }
+    }
+
+    return {
+      globalPassengers: globalPassengers,
+      refuelings: refuelingsList,
+      weeks: weeks
+    };
+  };
+
+  const handleRestoreData = async (backupData) => {
+    if (!backupData || !backupData.weeks) {
+      alert("Formato de backup inválido.");
+      return false;
+    }
+
+    try {
+      if (Array.isArray(backupData.globalPassengers)) {
+        setGlobalPassengers(backupData.globalPassengers);
+        localStorage.setItem('caronas_global_passengers', JSON.stringify(backupData.globalPassengers));
+        if (db) {
+          try {
+            await setDoc(doc(db, 'settings', 'passengers'), {
+              list: backupData.globalPassengers,
+              updatedAt: new Date().toISOString()
+            });
+          } catch (e) {
+            console.error(e);
+          }
+        }
+      }
+
+      if (Array.isArray(backupData.refuelings)) {
+        setRefuelingsList(backupData.refuelings);
+        localStorage.setItem('caronas_abastecimentos_data', JSON.stringify(backupData.refuelings));
+        if (db) {
+          try {
+            await setDoc(doc(db, 'refuelings', 'all'), {
+              list: backupData.refuelings,
+              updatedAt: new Date().toISOString()
+            });
+          } catch (e) {
+            console.error(e);
+          }
+        }
+      }
+
+      const weekEntries = Object.entries(backupData.weeks);
+      for (const [startDate, weekData] of weekEntries) {
+        localStorage.setItem(`caronas_semanais_data_${startDate}`, JSON.stringify(weekData));
+        if (startDate === state.startDate) {
+          setState(weekData);
+          localStorage.setItem('caronas_semanais_data', JSON.stringify(weekData));
+        }
+        if (db) {
+          try {
+            await setDoc(doc(db, 'weeks', startDate), {
+              ...weekData,
+              updatedAt: new Date().toISOString()
+            });
+          } catch (e) {
+            console.error(e);
+          }
+        }
+      }
+
+      if (viewMode === 'monthly') {
+        setSelectedMonth(prev => new Date(prev));
+      }
+
+      alert("Backup restaurado com sucesso!");
+      return true;
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao restaurar backup.");
+      return false;
+    }
+  };
+
+  useEffect(() => {
+    if (googleToken && isTokenValid()) {
+      loadDriveBackups(googleToken);
+    }
+  }, [googleToken]);
+
+  // Auto-backup to Google Drive check
+  useEffect(() => {
+    if (backupFrequency === 'disabled') return;
+    if (!googleToken || !isTokenValid()) return;
+
+    const now = Date.now();
+    let shouldBackup = false;
+
+    if (lastAutoBackupTime === 0) {
+      shouldBackup = true;
+    } else {
+      const diffMs = now - lastAutoBackupTime;
+      const oneDay = 24 * 60 * 60 * 1000;
+
+      if (backupFrequency === 'daily' && diffMs >= oneDay) {
+        shouldBackup = true;
+      } else if (backupFrequency === 'weekly' && diffMs >= 7 * oneDay) {
+        shouldBackup = true;
+      } else if (backupFrequency === 'monthly' && diffMs >= 30 * oneDay) {
+        shouldBackup = true;
+      }
+    }
+
+    if (shouldBackup) {
+      const timer = setTimeout(async () => {
+        try {
+          const folderId = await getOrCreateBackupFolder(googleToken);
+          const data = await gatherAllSystemData();
+          const nowObj = new Date();
+          const dateStr = formatDateISO(nowObj);
+          const fileName = `CaronasApp_Backup_Auto_${dateStr}.json`;
+          await uploadBackupToDrive(googleToken, folderId, fileName, data);
+          console.log(`Backup automático realizado: ${fileName}`);
+          
+          localStorage.setItem('caronas_last_auto_backup_time', String(now));
+          setLastAutoBackupTime(now);
+          loadDriveBackups(googleToken);
+        } catch (err) {
+          console.error("Erro no auto-backup:", err);
+        }
+      }, 5000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [backupFrequency, googleToken, lastAutoBackupTime]);
+
   const [syncStatus, setSyncStatus] = useState(() => (db ? 'loading' : 'local-only'));
 
   const skipSyncStatusChangeRef = React.useRef(false);
@@ -1116,6 +1587,19 @@ export default function App() {
                   Abastecimentos
                 </button>
               )}
+              {!isPublicView && (
+                <button
+                  onClick={() => setViewMode('backup')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wider transition duration-200 flex items-center gap-1 ${
+                    activeViewMode === 'backup'
+                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/10'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Database className="w-3.5 h-3.5" />
+                  Backup
+                </button>
+              )}
             </div>
 
             {/* Cloud status badge */}
@@ -1203,7 +1687,27 @@ export default function App() {
 
         {/* Core Layout Grid */}
         <main className="flex flex-col lg:flex-row gap-6 items-start w-full">
-          {activeViewMode === 'refuelings' ? (
+          {activeViewMode === 'backup' ? (
+            <BackupView
+              googleClientId={googleClientId}
+              onSaveGoogleClientId={handleSaveGoogleClientId}
+              googleToken={googleToken}
+              googleUser={googleUser}
+              onConnectGoogle={handleConnectGoogle}
+              onDisconnectGoogle={handleDisconnectGoogle}
+              backupFrequency={backupFrequency}
+              onChangeBackupFrequency={setBackupFrequency}
+              lastAutoBackupTime={lastAutoBackupTime}
+              onExportLocal={handleExportLocal}
+              onImportLocal={handleImportLocal}
+              onSaveToDrive={handleSaveToDrive}
+              driveFiles={driveFiles}
+              onLoadDriveFiles={() => loadDriveBackups(googleToken)}
+              onRestoreFromDrive={handleRestoreFromDrive}
+              onDeleteFromDrive={handleDeleteFromDrive}
+              isDriveLoading={isDriveLoading}
+            />
+          ) : activeViewMode === 'refuelings' ? (
             <RefuelingsView
               refuelings={refuelingsList}
               startDate={state.startDate}

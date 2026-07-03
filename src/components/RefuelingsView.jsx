@@ -22,6 +22,7 @@ export default function RefuelingsView({
   const [liters, setLiters] = useState('');
   const [pricePerLiter, setPricePerLiter] = useState('');
   const [totalValue, setTotalValue] = useState('');
+  const [discount, setDiscount] = useState('');
   const [station, setStation] = useState('');
   const [receiptImage, setReceiptImage] = useState(null); // base64 string
   const [ocrLoading, setOcrLoading] = useState(false);
@@ -72,14 +73,15 @@ export default function RefuelingsView({
     return `${fmt(start)} a ${fmt(end)}`;
   };
 
-  // Auto-calculate total value when liters and pricePerLiter change
+  // Auto-calculate total value when liters, pricePerLiter, and discount change
   useEffect(() => {
     const l = parseFloat(liters);
     const p = parseFloat(pricePerLiter);
+    const d = parseFloat(discount) || 0;
     if (!isNaN(l) && !isNaN(p) && l > 0 && p > 0) {
-      setTotalValue((l * p).toFixed(2));
+      setTotalValue((l * p - d).toFixed(2));
     }
-  }, [liters, pricePerLiter]);
+  }, [liters, pricePerLiter, discount]);
 
   const fileInputRef = useRef(null);
 
@@ -326,6 +328,7 @@ export default function RefuelingsView({
     setLiters(String(item.liters));
     setPricePerLiter(String(item.pricePerLiter));
     setTotalValue(String(item.totalValue));
+    setDiscount(item.discount ? String(item.discount) : '');
     setStation(item.station || '');
     setReceiptImage(item.receiptImage || null);
     setRawOcrText('');
@@ -342,6 +345,7 @@ export default function RefuelingsView({
     setLiters('');
     setPricePerLiter('');
     setTotalValue('');
+    setDiscount('');
     setStation('');
     setReceiptImage(null);
     setRawOcrText('');
@@ -373,6 +377,8 @@ export default function RefuelingsView({
     const calculatedPrice = isNaN(parsedPrice) 
       ? parseFloat((parsedTotal / parsedLiters).toFixed(2)) 
       : parsedPrice;
+    
+    const parsedDiscount = parseFloat(discount) || 0;
 
     if (editingId) {
       const updatedRecord = {
@@ -381,6 +387,7 @@ export default function RefuelingsView({
         liters: parsedLiters,
         pricePerLiter: calculatedPrice,
         totalValue: parsedTotal,
+        discount: parsedDiscount,
         station: station.trim() || 'Posto Desconhecido',
         receiptImage
       };
@@ -393,6 +400,7 @@ export default function RefuelingsView({
         liters: parsedLiters,
         pricePerLiter: calculatedPrice,
         totalValue: parsedTotal,
+        discount: parsedDiscount,
         station: station.trim() || 'Posto Desconhecido',
         receiptImage // saves compressed base64
       };
@@ -403,6 +411,7 @@ export default function RefuelingsView({
     setLiters('');
     setPricePerLiter('');
     setTotalValue('');
+    setDiscount('');
     setStation('');
     setReceiptImage(null);
     setOcrNotice('');
@@ -416,6 +425,7 @@ export default function RefuelingsView({
   const totalSpent = filteredRefuelings.reduce((sum, r) => sum + r.totalValue, 0);
   const totalLiters = filteredRefuelings.reduce((sum, r) => sum + r.liters, 0);
   const averagePrice = totalLiters > 0 ? (totalSpent / totalLiters) : 0;
+  const totalDiscount = filteredRefuelings.reduce((sum, r) => sum + (r.discount || 0), 0);
 
   const formatCurrency = (val) => {
     return val.toLocaleString('pt-BR', {
@@ -443,9 +453,16 @@ export default function RefuelingsView({
           <h3 className="text-3xl font-extrabold text-slate-100 tracking-tight mt-1">
             {formatCurrency(totalSpent)}
           </h3>
-          <p className="text-xs text-slate-400 mt-2 flex items-center gap-1">
-            <Coins className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Soma de todos os abastecimentos</span>
+          <p className="text-xs text-slate-400 mt-2 flex items-center justify-between">
+            <span className="flex items-center gap-1">
+              <Coins className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Soma de todos os abastecimentos</span>
+            </span>
+            {totalDiscount > 0 && (
+              <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/25">
+                Economia de {formatCurrency(totalDiscount)}
+              </span>
+            )}
           </p>
         </div>
 
@@ -560,6 +577,7 @@ export default function RefuelingsView({
                   <th className="text-left py-3 px-4 font-semibold text-slate-400 text-xs border-b border-white/5">Posto</th>
                   <th className="text-right py-3 px-4 font-semibold text-slate-400 text-xs border-b border-white/5 w-24">Litros</th>
                   <th className="text-right py-3 px-4 font-semibold text-slate-400 text-xs border-b border-white/5 w-28">Preço/Litro</th>
+                  <th className="text-right py-3 px-4 font-semibold text-slate-400 text-xs border-b border-white/5 w-28">Desconto</th>
                   <th className="text-right py-3 px-4 font-semibold text-slate-400 text-xs border-b border-white/5 w-28">Valor Total</th>
                   <th className="text-center py-3 px-4 font-semibold text-slate-400 text-xs border-b border-white/5 w-20">Cupom</th>
                   <th className="text-center py-3 px-4 font-semibold text-slate-400 text-xs border-b border-white/5 w-24">Ação</th>
@@ -568,7 +586,7 @@ export default function RefuelingsView({
               <tbody className="divide-y divide-white/5">
                 {filteredRefuelings.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-slate-400 text-sm">
+                    <td colSpan={8} className="py-8 text-center text-slate-400 text-sm">
                       Nenhum abastecimento encontrado para o filtro ativo.
                     </td>
                   </tr>
@@ -589,6 +607,9 @@ export default function RefuelingsView({
                         </td>
                         <td className="py-3 px-4 border-b border-white/5 text-sm text-slate-300 text-right font-medium">
                           {formatCurrency(item.pricePerLiter)}
+                        </td>
+                        <td className="py-3 px-4 border-b border-white/5 text-sm text-amber-500 text-right font-semibold">
+                          {item.discount && item.discount > 0 ? formatCurrency(item.discount) : '-'}
                         </td>
                         <td className="py-3 px-4 border-b border-white/5 text-sm text-emerald-400 text-right font-bold">
                           {formatCurrency(item.totalValue)}
@@ -794,6 +815,26 @@ export default function RefuelingsView({
                   placeholder="Calculado se vazio"
                   value={pricePerLiter}
                   onChange={(e) => setPricePerLiter(e.target.value)}
+                  className="block w-full pl-8 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+            </div>
+
+            {/* Discount Field */}
+            <div>
+              <label className="text-xs font-semibold text-slate-400 block mb-1">
+                Desconto (R$)
+              </label>
+              <div className="relative rounded-xl shadow-sm">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <span className="text-slate-500 text-xs">R$</span>
+                </div>
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="Ex: 10.00"
+                  value={discount}
+                  onChange={(e) => setDiscount(e.target.value)}
                   className="block w-full pl-8 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
