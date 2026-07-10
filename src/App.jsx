@@ -251,28 +251,11 @@ export default function App() {
     };
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem('caronas_backup_frequency', backupFrequency);
-  }, [backupFrequency]);
+  const tokenClientRef = React.useRef(null);
 
-  const isTokenValid = () => {
-    if (!googleToken) return false;
-    const expiryStr = localStorage.getItem('caronas_google_token_expiry');
-    if (!expiryStr) return false;
-    const expiry = parseInt(expiryStr, 10);
-    return Date.now() < expiry - 5 * 60 * 1000;
-  };
-
-  const handleSaveGoogleClientId = (id) => {
-    setGoogleClientId(id);
-    localStorage.setItem('caronas_google_client_id', id);
-  };
-
-  const handleConnectGoogle = () => {
-    if (!googleClientId) {
-      alert("Por favor, configure o Google Client ID primeiro.");
-      return;
-    }
+  const initTokenClient = () => {
+    if (!googleClientId) return null;
+    if (tokenClientRef.current) return tokenClientRef.current;
     
     if (window.google && window.google.accounts && window.google.accounts.oauth2) {
       try {
@@ -281,9 +264,9 @@ export default function App() {
           scope: 'https://www.googleapis.com/auth/drive.file',
           callback: (tokenResponse) => {
             if (tokenResponse.access_token) {
+              const expiryTime = Date.now() + tokenResponse.expires_in * 1000;
               setGoogleToken(tokenResponse.access_token);
               localStorage.setItem('caronas_google_token', tokenResponse.access_token);
-              const expiryTime = Date.now() + tokenResponse.expires_in * 1000;
               localStorage.setItem('caronas_google_token_expiry', String(expiryTime));
               
               fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
@@ -294,26 +277,92 @@ export default function App() {
                 if (info.email) {
                   setGoogleUser(info.email);
                   localStorage.setItem('caronas_google_user', info.email);
+                  if (db) {
+                    setDoc(doc(db, 'settings', 'google'), {
+                      googleToken: tokenResponse.access_token,
+                      googleTokenExpiry: expiryTime,
+                      googleUser: info.email
+                    }, { merge: true }).catch(err => console.error(err));
+                  }
                 }
               })
-              .catch(() => {});
+              .catch(() => {
+                if (db) {
+                  setDoc(doc(db, 'settings', 'google'), {
+                    googleToken: tokenResponse.access_token,
+                    googleTokenExpiry: expiryTime
+                  }, { merge: true }).catch(err => console.error(err));
+                }
+              });
               
               alert("Google Drive conectado com sucesso!");
               loadDriveBackups(tokenResponse.access_token);
             }
           },
         });
-        client.requestAccessToken({ prompt: 'consent' });
+        tokenClientRef.current = client;
+        return client;
       } catch (err) {
-        console.error("Erro ao conectar Google:", err);
-        alert("Erro ao iniciar login do Google. Verifique o console ou seu Client ID.");
+        console.error("Erro ao inicializar token client:", err);
       }
+    }
+    return null;
+  };
+
+  const isTokenValid = () => {
+    if (!googleToken) return false;
+    const expiryStr = localStorage.getItem('caronas_google_token_expiry');
+    if (!expiryStr) return false;
+    const expiry = parseInt(expiryStr, 10);
+    return Date.now() < expiry - 5 * 60 * 1000;
+  };
+
+  const handleSaveGoogleClientId = async (id) => {
+    setGoogleClientId(id);
+    localStorage.setItem('caronas_google_client_id', id);
+    if (db) {
+      try {
+        await setDoc(doc(db, 'settings', 'google'), { googleClientId: id }, { merge: true });
+      } catch (err) {
+        console.error("Erro ao salvar googleClientId no Firestore:", err);
+      }
+    }
+  };
+
+  const handleChangeBackupFrequency = async (freq) => {
+    setBackupFrequency(freq);
+    localStorage.setItem('caronas_backup_frequency', freq);
+    if (db) {
+      try {
+        await setDoc(doc(db, 'settings', 'google'), { backupFrequency: freq }, { merge: true });
+      } catch (err) {
+        console.error("Erro ao salvar backupFrequency no Firestore:", err);
+      }
+    }
+  };
+
+  const handleSaveLastAutoBackupTime = async (time) => {
+    setLastAutoBackupTime(time);
+    localStorage.setItem('caronas_last_auto_backup_time', String(time));
+    if (db) {
+      try {
+        await setDoc(doc(db, 'settings', 'google'), { lastAutoBackupTime: time }, { merge: true });
+      } catch (err) {
+        console.error("Erro ao salvar lastAutoBackupTime no Firestore:", err);
+      }
+    }
+  };
+
+  const handleConnectGoogle = () => {
+    const client = initTokenClient();
+    if (client) {
+      client.requestAccessToken({ prompt: 'consent' });
     } else {
       alert("O script de login do Google está sendo carregado. Tente novamente em alguns segundos.");
     }
   };
 
-  const handleDisconnectGoogle = () => {
+  const handleDisconnectGoogle = async () => {
     if (googleToken && window.google && window.google.accounts && window.google.accounts.oauth2) {
       try {
         window.google.accounts.oauth2.revoke(googleToken, () => {});
@@ -325,8 +374,90 @@ export default function App() {
     localStorage.removeItem('caronas_google_token');
     localStorage.removeItem('caronas_google_token_expiry');
     localStorage.removeItem('caronas_google_user');
+    if (db) {
+      try {
+        await setDoc(doc(db, 'settings', 'google'), {
+          googleToken: '',
+          googleTokenExpiry: 0,
+          googleUser: ''
+        }, { merge: true });
+      } catch (err) {
+        console.error("Erro ao limpar dados do Google no Firestore:", err);
+      }
+    }
     alert("Google Drive desconectado.");
   };
+
+  // Listen to Firestore Google Settings changes (for multi-origin sync)
+  useEffect(() => {
+    if (!db) return;
+
+    const unsubscribe = onSnapshot(doc(db, 'settings', 'google'), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        
+        if (data.googleClientId !== undefined) {
+          setGoogleClientId(data.googleClientId);
+          localStorage.setItem('caronas_google_client_id', data.googleClientId);
+        }
+        
+        if (data.googleToken !== undefined) {
+          setGoogleToken(data.googleToken);
+          localStorage.setItem('caronas_google_token', data.googleToken);
+        }
+        
+        if (data.googleTokenExpiry !== undefined) {
+          localStorage.setItem('caronas_google_token_expiry', String(data.googleTokenExpiry));
+        } else {
+          localStorage.removeItem('caronas_google_token_expiry');
+        }
+        
+        if (data.googleUser !== undefined) {
+          setGoogleUser(data.googleUser);
+          localStorage.setItem('caronas_google_user', data.googleUser);
+        }
+        
+        if (data.backupFrequency !== undefined) {
+          setBackupFrequency(data.backupFrequency);
+          localStorage.setItem('caronas_backup_frequency', data.backupFrequency);
+        }
+        
+        if (data.lastAutoBackupTime !== undefined) {
+          setLastAutoBackupTime(data.lastAutoBackupTime);
+          localStorage.setItem('caronas_last_auto_backup_time', String(data.lastAutoBackupTime));
+        }
+      }
+    }, (err) => {
+      console.error("Erro ao escutar configurações do Google no Firestore:", err);
+    });
+
+    return () => unsubscribe();
+  }, [db]);
+
+  // Startup silent refresh logic
+  useEffect(() => {
+    if (!googleClientId) return;
+
+    const checkAndRefresh = () => {
+      if (window.google && window.google.accounts && window.google.accounts.oauth2) {
+        if (googleToken && !isTokenValid()) {
+          console.log("Token do Google expirado no início. Iniciando atualização silenciosa...");
+          const client = initTokenClient();
+          if (client) {
+            try {
+              client.requestAccessToken({ prompt: '' });
+            } catch (err) {
+              console.error("Erro ao tentar atualizar token silenciosamente:", err);
+            }
+          }
+        }
+      } else {
+        setTimeout(checkAndRefresh, 1000);
+      }
+    };
+
+    checkAndRefresh();
+  }, [googleClientId, googleToken]);
 
   const getOrCreateBackupFolder = async (token) => {
     const queryStr = encodeURIComponent("name = 'CaronasApp_Backups' and mimeType = 'application/vnd.google-apps.folder' and trashed = false");
@@ -643,7 +774,23 @@ export default function App() {
   // Auto-backup to Google Drive check
   useEffect(() => {
     if (backupFrequency === 'disabled') return;
-    if (!googleToken || !isTokenValid()) return;
+    if (!googleToken) return;
+
+    // Try to silently refresh token if it is expired
+    if (!isTokenValid()) {
+      if (window.google && window.google.accounts && window.google.accounts.oauth2) {
+        console.log("Token expirado antes do auto-backup. Tentando atualização silenciosa...");
+        const client = initTokenClient();
+        if (client) {
+          try {
+            client.requestAccessToken({ prompt: '' });
+          } catch (err) {
+            console.error("Erro ao atualizar token para auto-backup:", err);
+          }
+        }
+      }
+      return;
+    }
 
     const now = Date.now();
     let shouldBackup = false;
@@ -674,8 +821,7 @@ export default function App() {
           await uploadBackupToDrive(googleToken, folderId, fileName, data);
           console.log(`Backup automático realizado: ${fileName}`);
           
-          localStorage.setItem('caronas_last_auto_backup_time', String(now));
-          setLastAutoBackupTime(now);
+          await handleSaveLastAutoBackupTime(now);
           loadDriveBackups(googleToken);
         } catch (err) {
           console.error("Erro no auto-backup:", err);
@@ -920,6 +1066,8 @@ export default function App() {
             passengers: state.passengers,
             cellStates: state.cellStates,
             pixKey: state.pixKey || '',
+            driverNotes: state.driverNotes || {},
+            passengerNotes: state.passengerNotes || {},
             updatedAt: new Date().toISOString()
           });
         }
@@ -1200,6 +1348,29 @@ export default function App() {
         }
       };
     });
+  };
+
+  const handleUpdateDriverNote = (dayIdx, note) => {
+    setState(prev => ({
+      ...prev,
+      driverNotes: {
+        ...(prev.driverNotes || {}),
+        [dayIdx]: note
+      }
+    }));
+  };
+
+  const handleUpdatePassengerNote = (passengerId, dayIdx, note) => {
+    setState(prev => ({
+      ...prev,
+      passengerNotes: {
+        ...(prev.passengerNotes || {}),
+        [passengerId]: {
+          ...(prev.passengerNotes?.[passengerId] || {}),
+          [dayIdx]: note
+        }
+      }
+    }));
   };
 
   // Driver Status toggling (Cycles: neutral -> active -> off -> neutral)
@@ -1696,7 +1867,7 @@ export default function App() {
               onConnectGoogle={handleConnectGoogle}
               onDisconnectGoogle={handleDisconnectGoogle}
               backupFrequency={backupFrequency}
-              onChangeBackupFrequency={setBackupFrequency}
+              onChangeBackupFrequency={handleChangeBackupFrequency}
               lastAutoBackupTime={lastAutoBackupTime}
               onExportLocal={handleExportLocal}
               onImportLocal={handleImportLocal}
@@ -1755,6 +1926,10 @@ export default function App() {
                     isPublicView={isPublicView}
                     passengerMonthlyTotals={passengerMonthlyTotals}
                     activeMonthName={formattedActiveMonthName}
+                    driverNotes={state.driverNotes || {}}
+                    passengerNotes={state.passengerNotes || {}}
+                    onUpdateDriverNote={handleUpdateDriverNote}
+                    onUpdatePassengerNote={handleUpdatePassengerNote}
                   />
                   {!isPublicView && (
                     <PassengerRoutesTable

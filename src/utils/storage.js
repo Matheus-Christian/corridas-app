@@ -58,6 +58,8 @@ export const getInitialData = () => {
     driverOffDays: initialDriverOff,
     cellStates: initialCells,
     pixKey: '',
+    driverNotes: {},
+    passengerNotes: {},
   };
 };
 

@@ -1,6 +1,7 @@
 import React from 'react';
-import { CalendarRange, ExternalLink, ArrowRight, Copy, Check } from 'lucide-react';
+import { CalendarRange, ExternalLink, ArrowRight, Copy, Check, X } from 'lucide-react';
 import { getDriverStatus, getPassengerRate } from '../utils/storage';
+import { generatePixPayload } from '../utils/pix';
 
 export default function MonthlyTable({
   weeksData,     // Object: { [mondayISO]: weekStateData }
@@ -11,6 +12,71 @@ export default function MonthlyTable({
   pixKey = '',
 }) {
   const [copiedPassengerId, setCopiedPassengerId] = React.useState(null);
+  const [selectedPixPassenger, setSelectedPixPassenger] = React.useState(null);
+  const [pixAmountType, setPixAmountType] = React.useState('month'); // 'month' | 'week' | 'custom' | 'none'
+  const [selectedWeekIdx, setSelectedWeekIdx] = React.useState(0);
+  const [customPixAmount, setCustomPixAmount] = React.useState('');
+  const [generatedPix, setGeneratedPix] = React.useState(null); // { code, amount, label }
+  const [copiedPixCode, setCopiedPixCode] = React.useState(false);
+
+  const getPassengerWeeksList = (passengerId) => {
+    return mondayDates.map((mon, idx) => {
+      const value = getPassengerWeekTotal(passengerId, weeksData[mon]);
+      return {
+        mondayISO: mon,
+        weekLabel: `Semana ${idx + 1} (${getWeekRangeLabel(mon)})`,
+        value: value
+      };
+    }).filter(w => w.value > 0);
+  };
+
+  const handleGeneratePix = () => {
+    if (!selectedPixPassenger) return;
+    
+    let amount = null;
+    let label = '';
+    
+    if (pixAmountType === 'month') {
+      amount = selectedPixPassenger.monthTotal;
+      label = `Total do Mês - ${formatCurrency(amount)}`;
+    } else if (pixAmountType === 'week') {
+      const weekItem = selectedPixPassenger.weeksList[selectedWeekIdx];
+      if (weekItem) {
+        amount = weekItem.value;
+        label = `${weekItem.weekLabel} - ${formatCurrency(amount)}`;
+      } else {
+        alert("Nenhuma semana válida selecionada.");
+        return;
+      }
+    } else if (pixAmountType === 'custom') {
+      const parsed = parseFloat(customPixAmount);
+      if (isNaN(parsed) || parsed <= 0) {
+        alert("Por favor, insira um valor válido maior que R$ 0,00.");
+        return;
+      }
+      amount = parsed;
+      label = `Valor Personalizado - ${formatCurrency(amount)}`;
+    } else {
+      amount = null;
+      label = 'Chave PIX Direta (Sem valor definido)';
+    }
+    
+    try {
+      const code = generatePixPayload(pixKey, amount, 'Caronas App', 'SAO PAULO');
+      setGeneratedPix({ code, amount, label });
+      setCopiedPixCode(false);
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao gerar payload do PIX.");
+    }
+  };
+
+  const handleCopyPixCode = () => {
+    if (!generatedPix) return;
+    navigator.clipboard.writeText(generatedPix.code);
+    setCopiedPixCode(true);
+    setTimeout(() => setCopiedPixCode(false), 2000);
+  };
 
   const getWeekRangeLabel = (mondayISO) => {
     const start = new Date(mondayISO + 'T00:00:00');
@@ -226,25 +292,25 @@ export default function MonthlyTable({
                     <td className="py-4 px-4 text-center border-b border-white/5">
                       {pixKey ? (
                         <button
-                          onClick={() => handleCopyPix(passenger.id)}
-                          className={`inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer select-none ${
-                            copiedPassengerId === passenger.id
-                              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 shadow-sm'
-                              : 'bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-600 shadow-sm'
-                          }`}
-                          title="Copiar Chave PIX do Motorista"
+                          onClick={() => {
+                            const monthTotal = getPassengerMonthTotal(passenger.id);
+                            const weeksList = getPassengerWeeksList(passenger.id);
+                            setSelectedPixPassenger({
+                              id: passenger.id,
+                              name: passenger.name,
+                              monthTotal,
+                              weeksList
+                            });
+                            setPixAmountType('month');
+                            setSelectedWeekIdx(0);
+                            setCustomPixAmount('');
+                            setGeneratedPix(null);
+                          }}
+                          className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer select-none bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-600 shadow-sm"
+                          title="Opções de Pagamento PIX"
                         >
-                          {copiedPassengerId === passenger.id ? (
-                            <>
-                              <Check className="w-3.5 h-3.5" />
-                              <span className="text-[10px]">Copiado!</span>
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="w-3.5 h-3.5" />
-                              <span className="text-[10px]">PIX</span>
-                            </>
-                          )}
+                          <Copy className="w-3.5 h-3.5" />
+                          <span className="text-[10px]">PIX</span>
                         </button>
                       ) : (
                         <span className="text-xs text-slate-500 font-medium">-</span>
@@ -295,6 +361,252 @@ export default function MonthlyTable({
             <ArrowRight className="w-3.5 h-3.5 text-indigo-400" />
             Atalho: Clique em qualquer valor ou data para abrir e editar os detalhes daquela semana.
           </span>
+        </div>
+      )}
+
+      {/* PIX Modal Dialog */}
+      {selectedPixPassenger && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm transition-opacity"
+            onClick={() => {
+              setSelectedPixPassenger(null);
+              setGeneratedPix(null);
+            }}
+          />
+
+          {/* Modal Container */}
+          <div className="relative w-full max-w-md glass-panel rounded-3xl shadow-2xl overflow-hidden border border-white/10 flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-200 bg-slate-900/95">
+            
+            {/* Header */}
+            <div className="p-6 border-b border-white/10 flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <CalendarRange className="w-5 h-5 text-indigo-400" />
+                <h2 className="text-xl font-bold text-slate-100">PIX Dinâmico</h2>
+              </div>
+              <button 
+                onClick={() => {
+                  setSelectedPixPassenger(null);
+                  setGeneratedPix(null);
+                }}
+                className="p-1 text-slate-400 hover:text-slate-200 rounded-lg hover:bg-white/5 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 overflow-y-auto flex-1">
+              {!generatedPix ? (
+                // View 1: Select payment options
+                <div className="space-y-6">
+                  <div>
+                    <p className="text-xs text-slate-400">Passageiro selecionado:</p>
+                    <h3 className="text-lg font-bold text-indigo-400">{selectedPixPassenger.name}</h3>
+                  </div>
+
+                  <div className="space-y-4">
+                    <p className="text-xs font-semibold text-slate-300">Escolha uma opção de cobrança:</p>
+
+                    {/* Option 1: Monthly Total */}
+                    <label className={`flex items-start gap-3 p-4 rounded-2xl border transition cursor-pointer select-none ${
+                      pixAmountType === 'month'
+                        ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-300'
+                        : 'bg-white/5 border-white/5 hover:border-white/10 text-slate-300'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="pixType"
+                        checked={pixAmountType === 'month'}
+                        onChange={() => setPixAmountType('month')}
+                        className="mt-1 accent-indigo-500"
+                      />
+                      <div className="flex-1">
+                        <span className="text-sm font-semibold block">Total Acumulado do Mês</span>
+                        <span className="text-xs text-emerald-400 font-bold block mt-0.5">
+                          {formatCurrency(selectedPixPassenger.monthTotal)}
+                        </span>
+                      </div>
+                    </label>
+
+                    {/* Option 2: Weekly Total (only if active weeks exist) */}
+                    {selectedPixPassenger.weeksList.length > 0 ? (
+                      <div className={`flex flex-col gap-2 p-4 rounded-2xl border transition ${
+                        pixAmountType === 'week'
+                          ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-300'
+                          : 'bg-white/5 border-white/5 hover:border-white/10 text-slate-300'
+                      }`}>
+                        <label className="flex items-start gap-3 cursor-pointer select-none">
+                          <input
+                            type="radio"
+                            name="pixType"
+                            checked={pixAmountType === 'week'}
+                            onChange={() => setPixAmountType('week')}
+                            className="mt-1 accent-indigo-500"
+                          />
+                          <div className="flex-1">
+                            <span className="text-sm font-semibold block">Pagar uma Semana Específica</span>
+                          </div>
+                        </label>
+                        {pixAmountType === 'week' && (
+                          <div className="mt-2 pl-6">
+                            <select
+                              value={selectedWeekIdx}
+                              onChange={(e) => setSelectedWeekIdx(parseInt(e.target.value, 10))}
+                              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                            >
+                              {selectedPixPassenger.weeksList.map((w, idx) => (
+                                <option key={w.mondayISO} value={idx}>
+                                  {w.weekLabel} - {formatCurrency(w.value)}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="p-4 rounded-2xl bg-slate-800/40 text-slate-500 border border-slate-800 text-xs">
+                        Nenhuma semana preenchida neste mês.
+                      </div>
+                    )}
+
+                    {/* Option 3: Custom Amount */}
+                    <div className={`flex flex-col gap-2 p-4 rounded-2xl border transition ${
+                      pixAmountType === 'custom'
+                        ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-300'
+                        : 'bg-white/5 border-white/5 hover:border-white/10 text-slate-300'
+                    }`}>
+                      <label className="flex items-start gap-3 cursor-pointer select-none">
+                        <input
+                          type="radio"
+                          name="pixType"
+                          checked={pixAmountType === 'custom'}
+                          onChange={() => setPixAmountType('custom')}
+                          className="mt-1 accent-indigo-500"
+                        />
+                        <div className="flex-1">
+                          <span className="text-sm font-semibold block">Valor Personalizado</span>
+                        </div>
+                      </label>
+                      {pixAmountType === 'custom' && (
+                        <div className="mt-2 pl-6 relative">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500 text-xs font-semibold">
+                            R$
+                          </div>
+                          <input
+                            type="number"
+                            step="0.01"
+                            placeholder="0.00"
+                            value={customPixAmount}
+                            onChange={(e) => setCustomPixAmount(e.target.value)}
+                            className="w-full pl-8 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Option 4: Direct Key (No value) */}
+                    <label className={`flex items-start gap-3 p-4 rounded-2xl border transition cursor-pointer select-none ${
+                      pixAmountType === 'none'
+                        ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-300'
+                        : 'bg-white/5 border-white/5 hover:border-white/10 text-slate-300'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="pixType"
+                        checked={pixAmountType === 'none'}
+                        onChange={() => setPixAmountType('none')}
+                        className="mt-1 accent-indigo-500"
+                      />
+                      <div className="flex-1">
+                        <span className="text-sm font-semibold block">Apenas QR Code / Chave PIX</span>
+                        <span className="text-[10px] text-slate-400 block mt-0.5">
+                          Gera o PIX para escaneamento sem definir valor fixo.
+                        </span>
+                      </div>
+                    </label>
+                  </div>
+
+                  <button
+                    onClick={handleGeneratePix}
+                    className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 text-white font-semibold text-sm shadow-lg shadow-indigo-500/20 transition cursor-pointer mt-4"
+                  >
+                    Gerar Código PIX
+                  </button>
+                </div>
+              ) : (
+                // View 2: Show QR Code and copy-paste code
+                <div className="space-y-6 text-center">
+                  <div>
+                    <p className="text-xs text-slate-400">PIX para {selectedPixPassenger.name}</p>
+                    <h4 className="text-sm font-bold text-indigo-300 mt-1">{generatedPix.label}</h4>
+                  </div>
+
+                  {/* QR Code Frame */}
+                  <div className="bg-white p-4 rounded-3xl inline-block shadow-lg border border-white/10 mx-auto">
+                    <img 
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(generatedPix.code)}`} 
+                      alt="QR Code PIX" 
+                      className="w-40 h-40 object-contain"
+                    />
+                  </div>
+
+                  {/* Copia e Cola Field */}
+                  <div className="text-left space-y-2">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Código Copia e Cola</label>
+                    <div className="relative bg-slate-950 p-3 rounded-2xl border border-white/5 font-mono text-[10px] text-slate-300 break-all select-all max-h-24 overflow-y-auto">
+                      {generatedPix.code}
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <button
+                      onClick={() => setGeneratedPix(null)}
+                      className="py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-semibold text-sm transition cursor-pointer"
+                    >
+                      Voltar
+                    </button>
+                    <button
+                      onClick={handleCopyPixCode}
+                      className={`py-2.5 px-4 rounded-xl font-semibold text-sm transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                        copiedPixCode
+                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                          : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                      }`}
+                    >
+                      {copiedPixCode ? (
+                        <>
+                          <Check className="w-4 h-4" />
+                          <span>Copiado!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4" />
+                          <span>Copiar Código</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-6 border-t border-white/10 bg-slate-900/60 flex items-center justify-end">
+              <button
+                onClick={() => {
+                  setSelectedPixPassenger(null);
+                  setGeneratedPix(null);
+                }}
+                className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-semibold text-sm transition cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+
+          </div>
         </div>
       )}
 

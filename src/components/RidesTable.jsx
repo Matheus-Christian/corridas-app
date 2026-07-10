@@ -28,8 +28,66 @@ export default function RidesTable({
   isPublicView = false,
   passengerMonthlyTotals = {},
   activeMonthName = '',
+  driverNotes = {},
+  passengerNotes = {},
+  onUpdateDriverNote = () => {},
+  onUpdatePassengerNote = () => {},
 }) {
   const [swipedPassengerId, setSwipedPassengerId] = React.useState(null);
+  const [hoverTooltip, setHoverTooltip] = React.useState(null);
+  const hoverTimeoutRef = React.useRef(null);
+  const containerRef = React.useRef(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleMouseEnter = (text, event) => {
+    if (!text || !text.trim()) return;
+    
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+    }
+    
+    const target = event.currentTarget;
+    
+    hoverTimeoutRef.current = setTimeout(() => {
+      if (!containerRef.current) return;
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const rect = target.getBoundingClientRect();
+      const x = rect.left - containerRect.left + rect.width / 2;
+      const y = rect.top - containerRect.top - 8; // Center directly above target inside card
+      setHoverTooltip({ text, x, y });
+    }, 1000); // 1 second delay
+  };
+
+  const handleMouseLeave = () => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+    setHoverTooltip(null);
+  };
+
+  const handleEditDriverNote = (dayIdx) => {
+    const current = driverNotes[dayIdx] || '';
+    const note = prompt(`Observação para o Motorista (${WEEK_DAYS[dayIdx].fullName}):`, current);
+    if (note !== null) {
+      onUpdateDriverNote(dayIdx, note.trim());
+    }
+  };
+
+  const handleEditPassengerNote = (passengerId, passengerName, dayIdx) => {
+    const current = passengerNotes[passengerId]?.[dayIdx] || '';
+    const note = prompt(`Observação para ${passengerName} (${WEEK_DAYS[dayIdx].fullName}):`, current);
+    if (note !== null) {
+      onUpdatePassengerNote(passengerId, dayIdx, note.trim());
+    }
+  };
 
   React.useEffect(() => {
     if (!swipedPassengerId) return;
@@ -110,7 +168,7 @@ export default function RidesTable({
   };
 
   return (
-    <div className="glass-panel rounded-3xl p-6 shadow-xl border border-white/10 w-full flex flex-col">
+    <div ref={containerRef} className="glass-panel rounded-3xl p-6 shadow-xl border border-white/10 w-full flex flex-col relative">
       
       {/* Table Header Section */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-white/5 pb-4 mb-4">
@@ -181,10 +239,14 @@ export default function RidesTable({
                   statusLabel = 'Folga M';
                 }
 
+                const currentDriverNote = driverNotes[idx] || '';
+
                 return (
                   <th 
                     key={idx} 
-                    className={`py-3 px-2 font-semibold text-center border-b border-white/5 transition-all duration-200 ${headerClass}`}
+                    className={`py-3 px-2 font-semibold text-center border-b border-white/5 transition-all duration-200 group/header relative ${headerClass}`}
+                    onMouseEnter={(e) => handleMouseEnter(currentDriverNote, e)}
+                    onMouseLeave={handleMouseLeave}
                   >
                     <div className="flex flex-col items-center gap-1">
                       <span className="text-xs text-slate-400 font-medium">{day.name}</span>
@@ -194,7 +256,6 @@ export default function RidesTable({
                       {isPublicView ? (
                         <div
                           className={`mt-1.5 px-2 py-1 rounded-lg text-[10px] font-semibold flex items-center justify-center gap-1.5 opacity-85 select-none ${btnClass}`}
-                          title={`Motorista: ${statusLabel}`}
                         >
                           <span className={`w-1.5 h-1.5 rounded-full ${dotClass}`} />
                           <span>{statusLabel}</span>
@@ -208,6 +269,26 @@ export default function RidesTable({
                           <span className={`w-1.5 h-1.5 rounded-full ${dotClass}`} />
                           <span>{statusLabel}</span>
                         </button>
+                      )}
+
+                      {/* Driver Note Indicator */}
+                      {currentDriverNote ? (
+                        <div 
+                          className="mt-1 text-[9px] text-indigo-300/80 hover:text-indigo-200 cursor-pointer flex items-center gap-0.5 select-none"
+                          onClick={() => !isPublicView && handleEditDriverNote(idx)}
+                        >
+                          <span>💬</span>
+                          <span className="truncate max-w-[65px] font-normal">{currentDriverNote}</span>
+                        </div>
+                      ) : (
+                        !isPublicView && (
+                          <button
+                            onClick={() => handleEditDriverNote(idx)}
+                            className="mt-1 text-[9px] text-slate-500 hover:text-slate-300 cursor-pointer opacity-0 group-hover/header:opacity-100 transition-opacity"
+                          >
+                            + obs
+                          </button>
+                        )
                       )}
                     </div>
                   </th>
@@ -335,11 +416,40 @@ export default function RidesTable({
                         cellClass = 'bg-slate-900/10 border border-white/5 text-slate-400/60 hover:bg-white/5 hover:text-slate-300';
                       }
 
+                      const currentPassengerNote = passengerNotes[passenger.id]?.[dayIdx] || '';
+
                       return (
                         <td 
                           key={dayIdx} 
-                          className="py-3.5 px-1 text-center border-b border-white/5"
+                          className="py-3.5 px-1 text-center border-b border-white/5 relative group/cell"
+                          onMouseEnter={(e) => handleMouseEnter(currentPassengerNote, e)}
+                          onMouseLeave={handleMouseLeave}
                         >
+                          {/* Passenger Note Indicator */}
+                          {currentPassengerNote ? (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditPassengerNote(passenger.id, passenger.name, dayIdx);
+                              }}
+                              className="absolute top-1 right-1 text-[9px] text-indigo-400 hover:text-indigo-300 z-10 cursor-pointer select-none"
+                            >
+                              💬
+                            </button>
+                          ) : (
+                            !isPublicView && !isDriverOff && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEditPassengerNote(passenger.id, passenger.name, dayIdx);
+                                }}
+                                className="absolute top-1 right-1 text-[8px] text-slate-500 hover:text-slate-300 opacity-0 group-hover/cell:opacity-100 transition-opacity z-10 cursor-pointer select-none"
+                              >
+                                +
+                              </button>
+                            )
+                          )}
+
                           {isDriverOff ? (
                             <div 
                               className={`w-full min-h-[46px] rounded-xl text-[10px] font-semibold py-2 px-1 select-none flex flex-col items-center justify-center gap-0.5 text-center leading-tight ${cellClass}`}
@@ -461,6 +571,17 @@ export default function RidesTable({
           </div>
         </div>
       </div>
+
+      {hoverTooltip && (
+        <div 
+          className="absolute z-50 px-2.5 py-1.5 rounded-lg bg-slate-950 text-slate-100 text-[11px] font-medium border border-white/10 shadow-xl max-w-xs pointer-events-none transform -translate-x-1/2 -translate-y-full text-center backdrop-blur-sm transition-all duration-150 animate-in fade-in"
+          style={{ left: hoverTooltip.x, top: hoverTooltip.y }}
+        >
+          {hoverTooltip.text}
+          {/* Tooltip Arrow */}
+          <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-slate-950" />
+        </div>
+      )}
 
     </div>
   );

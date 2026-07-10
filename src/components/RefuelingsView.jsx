@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Trash2, Fuel, Calendar, Coins, Sparkles, Upload, Loader2, Eye, X, Image as ImageIcon, Pencil } from 'lucide-react';
+import { Plus, Trash2, Fuel, Calendar, Coins, Sparkles, Upload, Loader2, Eye, X, Image as ImageIcon, Pencil, ChevronLeft, ChevronRight } from 'lucide-react';
 import Tesseract from 'tesseract.js';
+import { getMonday, formatDateISO } from '../utils/storage';
 
 export default function RefuelingsView({
   refuelings,
@@ -34,13 +35,25 @@ export default function RefuelingsView({
   const [editingId, setEditingId] = useState(null);
   const [filterMode, setFilterMode] = useState('all'); // 'all' | 'month' | 'week'
 
+  // Local filter states for custom month/week selection
+  const [localFilterMonth, setLocalFilterMonth] = useState(() => new Date(selectedMonth));
+  const [localFilterWeek, setLocalFilterWeek] = useState(() => startDate);
+
+  useEffect(() => {
+    setLocalFilterMonth(new Date(selectedMonth));
+  }, [selectedMonth]);
+
+  useEffect(() => {
+    setLocalFilterWeek(startDate);
+  }, [startDate]);
+
   // Filter validations
   const isInCurrentMonth = (dateString) => {
     if (!dateString) return false;
     const refDate = new Date(dateString + 'T00:00:00');
     return (
-      refDate.getFullYear() === selectedMonth.getFullYear() &&
-      refDate.getMonth() === selectedMonth.getMonth()
+      refDate.getFullYear() === localFilterMonth.getFullYear() &&
+      refDate.getMonth() === localFilterMonth.getMonth()
     );
   };
 
@@ -48,7 +61,7 @@ export default function RefuelingsView({
     if (!dateString) return false;
     const refDate = new Date(dateString + 'T00:00:00');
     
-    const start = new Date(startDate + 'T00:00:00');
+    const start = new Date(localFilterWeek + 'T00:00:00');
     const end = new Date(start);
     end.setDate(start.getDate() + 6); // Sunday
     
@@ -71,6 +84,73 @@ export default function RefuelingsView({
     end.setDate(start.getDate() + 6);
     const fmt = (d) => d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
     return `${fmt(start)} a ${fmt(end)}`;
+  };
+
+  const MONTHS = [
+    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+  ];
+
+  const currentYear = localFilterMonth.getFullYear();
+  const currentMonthIdx = localFilterMonth.getMonth();
+  const isMinMonth = currentYear === 2026 && currentMonthIdx === 5; // June is index 5
+
+  const handleLocalMonthChange = (e) => {
+    const idx = parseInt(e.target.value, 10);
+    setLocalFilterMonth(new Date(currentYear, idx, 1));
+  };
+
+  const handleLocalYearChange = (e) => {
+    const yr = parseInt(e.target.value, 10);
+    let targetMonth = currentMonthIdx;
+    if (yr === 2026 && targetMonth < 5) {
+      targetMonth = 5;
+    }
+    setLocalFilterMonth(new Date(yr, targetMonth, 1));
+  };
+
+  const handlePrevLocalMonth = () => {
+    if (isMinMonth) return;
+    setLocalFilterMonth(new Date(currentYear, currentMonthIdx - 1, 1));
+  };
+
+  const handleNextLocalMonth = () => {
+    setLocalFilterMonth(new Date(currentYear, currentMonthIdx + 1, 1));
+  };
+
+  const years = [];
+  const startYear = 2026;
+  const endYear = Math.max(new Date().getFullYear() + 3, 2026);
+  for (let y = startYear; y <= endYear; y++) {
+    years.push(y);
+  }
+
+  const availableMonths = MONTHS.map((name, idx) => ({ name, idx })).filter(
+    (item) => currentYear > 2026 || item.idx >= 5
+  );
+
+  const handleLocalWeekChange = (e) => {
+    const chosen = new Date(e.target.value + 'T00:00:00');
+    let mondayDate = getMonday(chosen);
+    if (mondayDate < new Date('2026-06-01T00:00:00')) {
+      mondayDate = new Date('2026-06-01T00:00:00');
+    }
+    setLocalFilterWeek(formatDateISO(mondayDate));
+  };
+
+  const handlePrevLocalWeek = () => {
+    if (localFilterWeek === '2026-06-01') return;
+    const current = new Date(localFilterWeek + 'T00:00:00');
+    const prev = new Date(current);
+    prev.setDate(current.getDate() - 7);
+    setLocalFilterWeek(formatDateISO(getMonday(prev)));
+  };
+
+  const handleNextLocalWeek = () => {
+    const current = new Date(localFilterWeek + 'T00:00:00');
+    const next = new Date(current);
+    next.setDate(current.getDate() + 7);
+    setLocalFilterWeek(formatDateISO(getMonday(next)));
   };
 
   // Auto-calculate total value when liters, pricePerLiter, and discount change
@@ -508,14 +588,88 @@ export default function RefuelingsView({
                 Visualização e gestão dos cupons fiscais e litros adquiridos.
               </p>
               {filterMode === 'month' && (
-                <span className="inline-block mt-2 text-[10px] font-semibold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-500/25">
-                  Filtro: {selectedMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
-                </span>
+                <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                  <span className="text-[10px] font-semibold text-indigo-400 bg-indigo-500/10 px-2 py-1 rounded-full border border-indigo-500/25">
+                    Filtro:
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={handlePrevLocalMonth}
+                      disabled={isMinMonth}
+                      className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-300 disabled:cursor-not-allowed border border-slate-700/50 cursor-pointer"
+                      title="Mês Anterior"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </button>
+                    <select
+                      value={currentMonthIdx}
+                      onChange={handleLocalMonthChange}
+                      className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-[11px] font-bold transition focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                    >
+                      {availableMonths.map((m) => (
+                        <option key={m.idx} value={m.idx} className="bg-slate-900 text-slate-100">
+                          {m.name}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={currentYear}
+                      onChange={handleLocalYearChange}
+                      className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-[11px] font-bold transition focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                    >
+                      {years.map((y) => (
+                        <option key={y} value={y} className="bg-slate-900 text-slate-100">
+                          {y}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={handleNextLocalMonth}
+                      className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/50 cursor-pointer"
+                      title="Próximo Mês"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
               )}
               {filterMode === 'week' && (
-                <span className="inline-block mt-2 text-[10px] font-semibold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-500/25">
-                  Filtro: Semana {getWeekRangeLabel(startDate)}
-                </span>
+                <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                  <span className="text-[10px] font-semibold text-indigo-400 bg-indigo-500/10 px-2 py-1 rounded-full border border-indigo-500/25">
+                    Filtro:
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={handlePrevLocalWeek}
+                      disabled={localFilterWeek === '2026-06-01'}
+                      className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-300 disabled:cursor-not-allowed border border-slate-700/50 cursor-pointer"
+                      title="Semana Anterior"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </button>
+                    <input
+                      type="date"
+                      value={localFilterWeek}
+                      min="2026-06-01"
+                      onChange={handleLocalWeekChange}
+                      className="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-[11px] font-bold transition focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <span className="text-[10px] text-slate-400 font-semibold ml-1">
+                      ({getWeekRangeLabel(localFilterWeek)})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleNextLocalWeek}
+                      className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/50 cursor-pointer"
+                      title="Próxima Semana"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
 
